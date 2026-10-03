@@ -1,5 +1,6 @@
 package eu.kanade.presentation.manga.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -59,6 +60,42 @@ fun DeleteChaptersDialog(
         },
         text = {
             Text(text = stringResource(MR.strings.confirm_delete_chapters))
+        },
+    )
+}
+
+@Composable
+fun TranslateChapterDialog(
+    pageCount: Int,
+    targetLanguage: String,
+    onDismissRequest: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onDismissRequest()
+                    onConfirm()
+                },
+            ) {
+                Text(text = stringResource(MR.strings.translation_confirm_action))
+            }
+        },
+        title = {
+            Text(text = stringResource(MR.strings.translation_confirm_title))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small)) {
+                Text(text = pluralStringResource(MR.plurals.translation_confirm_pages, count = pageCount, pageCount))
+                Text(text = stringResource(MR.strings.translation_confirm_privacy, targetLanguage))
+            }
         },
     )
 }
