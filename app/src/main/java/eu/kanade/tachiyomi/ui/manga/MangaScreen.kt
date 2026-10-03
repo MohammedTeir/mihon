@@ -33,6 +33,7 @@ import eu.kanade.presentation.manga.components.DeleteChaptersDialog
 import eu.kanade.presentation.manga.components.MangaCoverDialog
 import eu.kanade.presentation.manga.components.ScanlatorFilterDialog
 import eu.kanade.presentation.manga.components.SetIntervalDialog
+import eu.kanade.presentation.manga.components.TranslateChapterDialog
 import eu.kanade.presentation.util.AssistContentScreen
 import eu.kanade.presentation.util.Screen
 import eu.kanade.presentation.util.isTabletUi
@@ -53,6 +54,7 @@ import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import mihon.app.di.appGraph
 import mihon.feature.migration.config.MigrationConfigScreen
 import mihon.feature.migration.dialog.MigrateMangaDialog
 import tachiyomi.core.common.util.lang.withIOContext
@@ -80,6 +82,8 @@ class MangaScreen(
             assistedMetroViewModel<MangaViewModel, MangaViewModel.Factory> {
                 create(mangaId = mangaId, isFromSource = fromSource)
             }
+
+        val translationPreferences = remember { context.appGraph.translationPreferences }
 
         val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -113,6 +117,7 @@ class MangaScreen(
             navigateUp = navigator::pop,
             onChapterClicked = { openChapter(context, it) },
             onDownloadChapter = viewModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
+            onTranslateChapter = viewModel::translateChapter,
             onAddToLibraryClicked = {
                 viewModel.toggleFavorite()
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -260,6 +265,14 @@ class MangaScreen(
                 } else {
                     LoadingScreen(Modifier.systemBarsPadding())
                 }
+            }
+            is MangaViewModel.Dialog.TranslateChapter -> {
+                TranslateChapterDialog(
+                    pageCount = dialog.pageCount,
+                    targetLanguage = remember { translationPreferences.targetLanguage().get() },
+                    onDismissRequest = onDismissRequest,
+                    onConfirm = { viewModel.confirmTranslateChapter(dialog.chapter) },
+                )
             }
             is MangaViewModel.Dialog.SetFetchInterval -> {
                 SetIntervalDialog(
