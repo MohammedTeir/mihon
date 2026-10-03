@@ -23,6 +23,8 @@ import androidx.core.net.toUri
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.translation.TranslationOptions
+import eu.kanade.domain.translation.TranslationPreferences
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.advanced.ClearDatabaseScreen
 import eu.kanade.presentation.more.settings.screen.debug.DebugInfoScreen
@@ -76,6 +78,7 @@ object SettingsAdvancedScreen : SearchableSettings {
         val basePreferences = remember { graph.basePreferences }
         val networkPreferences = remember { graph.networkPreferences }
         val libraryPreferences = remember { graph.libraryPreferences }
+        val translationPreferences = remember { graph.translationPreferences }
         val crashLogUtil = remember { graph.crashLogUtil }
 
         return listOf(
@@ -119,6 +122,7 @@ object SettingsAdvancedScreen : SearchableSettings {
             getNetworkGroup(networkPreferences = networkPreferences),
             getLibraryGroup(libraryPreferences = libraryPreferences),
             getReaderGroup(basePreferences = basePreferences),
+            getTranslationGroup(translationPreferences = translationPreferences),
             getExtensionsGroup(basePreferences = basePreferences),
         )
     }
@@ -338,6 +342,49 @@ object SettingsAdvancedScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = basePreferences.highQualityRenderer,
                     title = stringResource(MR.strings.pref_high_quality_renderer),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getTranslationGroup(
+        translationPreferences: TranslationPreferences,
+    ): Preference.PreferenceGroup {
+        val enabledPref = remember { translationPreferences.enabled() }
+        val apiKeyPref = remember { translationPreferences.apiKey() }
+        val modelPref = remember { translationPreferences.model() }
+        val targetLanguagePref = remember { translationPreferences.targetLanguage() }
+
+        val apiKey by apiKeyPref.collectAsState()
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.pref_category_translation),
+            preferenceItems = listOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = enabledPref,
+                    title = stringResource(MR.strings.pref_translation_enable),
+                    subtitle = stringResource(MR.strings.pref_translation_enable_summary),
+                ),
+                Preference.PreferenceItem.EditTextPreference(
+                    preference = apiKeyPref,
+                    title = stringResource(MR.strings.pref_translation_api_key),
+                    // Fixed subtitle without "%s" so the stored key is never shown in the list.
+                    subtitle = if (apiKey.isBlank()) {
+                        stringResource(MR.strings.pref_translation_api_key_not_set)
+                    } else {
+                        stringResource(MR.strings.pref_translation_api_key_set)
+                    },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = modelPref,
+                    entries = TranslationOptions.MODELS,
+                    title = stringResource(MR.strings.pref_translation_model),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = targetLanguagePref,
+                    entries = TranslationOptions.LANGUAGES.associateWith { it },
+                    title = stringResource(MR.strings.pref_translation_target_language),
                 ),
             ),
         )
