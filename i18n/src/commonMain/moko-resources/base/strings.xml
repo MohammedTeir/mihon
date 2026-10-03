@@ -1106,4 +1106,20 @@
     <string name="donationCampaign.paragraph3">Regardless, Mihon will continue to be maintained by me and the volunteers, and it will stay open source.</string>
     <string name="donationCampaign.contactPlatform">Discord</string>
     <string name="donationCampaign.dismiss">Dismiss</string>
+
+    <!-- Chapter translation -->
+    <string name="pref_category_translation">Chapter translation</string>
+    <string name="pref_translation_enable">Enable chapter translation</string>
+    <string name="pref_translation_enable_summary">Adds a Translate button to downloaded chapters. Page images are uploaded to Google for translation, and usage is billed to your own Gemini API key.</string>
+    <string name="pref_translation_api_key">Gemini API key</string>
+    <string name="pref_translation_api_key_set">Key saved (hidden)</string>
+    <string name="pref_translation_api_key_not_set">Not set</string>
+    <string name="pref_translation_model">Image model</string>
+    <string name="pref_translation_target_language">Target language</string>
+    <string name="action_translate_chapter">Translate chapter</string>
+    <string name="translation_api_key_missing">Set your Gemini API key in Settings → Advanced → Chapter translation first</string>
+    <string name="translation_no_pages">No pages found in this downloaded chapter</string>
+    <string name="translation_confirm_title">Translate chapter?</string>
+    <string name="translation_confirm_privacy">The pages will be uploaded to Google and translated into %1$s. Usage is billed to your own API key and may take a while.</string>
+    <string name="translation_confirm_action">Translate</string>
 </resources>
