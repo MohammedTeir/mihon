@@ -114,4 +114,9 @@
         <item quantity="one">%1$d update failed</item>
         <item quantity="other">%1$d updates failed</item>
     </plurals>
+
+    <plurals name="translation_confirm_pages">
+        <item quantity="one">%1$d page will be sent for translation.</item>
+        <item quantity="other">%1$d pages will be sent for translation.</item>
+    </plurals>
 </resources>
