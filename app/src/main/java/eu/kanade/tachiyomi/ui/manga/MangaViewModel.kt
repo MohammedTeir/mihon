@@ -31,12 +31,15 @@ import eu.kanade.domain.track.interactor.RefreshTracks
 import eu.kanade.domain.track.interactor.TrackChapter
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.domain.translation.TranslationOptions
+import eu.kanade.domain.translation.TranslationPreferences
 import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.presentation.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.util.formattedMessage
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
+import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
@@ -57,6 +60,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import mihon.core.archive.archiveReader
 import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
 import tachiyomi.core.common.i18n.stringResource
@@ -123,6 +127,8 @@ class MangaViewModel(
     private val sourceManager: SourceManager,
     private val refreshTracks: RefreshTracks,
     private val coverCache: CoverCache,
+    private val translationPreferences: TranslationPreferences,
+    private val downloadProvider: DownloadProvider,
 ) : ViewModel() {
 
     val state: StateFlow<MangaViewModel.State>
@@ -216,6 +222,14 @@ class MangaViewModel(
                 }
         }
 
+        viewModelScope.launchIO {
+            translationPreferences.enabled().changes()
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    updateSuccessState { it.copy(translationEnabled = enabled) }
+                }
+        }
+
         observeDownloads()
 
         viewModelScope.launchIO {
@@ -242,6 +256,7 @@ class MangaViewModel(
                     isRefreshingData = needRefreshInfo || needRefreshChapter,
                     dialog = null,
                     hideMissingChapters = libraryPreferences.hideMissingChapters.get(),
+                    translationEnabled = translationPreferences.enabled().get(),
                 )
             }
 
@@ -721,6 +736,72 @@ class MangaViewModel(
         updateDownloadState(activeDownload.apply { status = Download.State.NOT_DOWNLOADED })
     }
 
+    // Chapter translation - start
+
+    /**
+     * Entry point of the Translate button. Checks the API key, counts the downloaded pages and
+     * asks for confirmation through [Dialog.TranslateChapter].
+     */
+    fun translateChapter(item: ChapterList.Item) {
+        val state = successState ?: return
+
+        if (translationPreferences.apiKey().get().isBlank()) {
+            viewModelScope.launch {
+                snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_api_key_missing))
+            }
+            return
+        }
+
+        viewModelScope.launchIO {
+            val pageCount = countDownloadedPages(item.chapter, state.manga, state.source)
+            if (pageCount == 0) {
+                snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_no_pages))
+                return@launchIO
+            }
+            updateSuccessState { it.copy(dialog = Dialog.TranslateChapter(item.chapter, pageCount)) }
+        }
+    }
+
+    fun confirmTranslateChapter(chapter: Chapter) {
+        // TODO(Step 5): enqueue TranslationWorker.start(context, chapter.id) here.
+        logcat(LogPriority.DEBUG) { "Translate confirmed for chapter ${chapter.id} (worker not implemented yet)" }
+    }
+
+    /**
+     * Counts the image pages of a downloaded chapter, which is stored either as a folder or as a .cbz archive.
+     */
+    private fun countDownloadedPages(chapter: Chapter, manga: Manga, source: Source): Int {
+        val chapterDir = downloadProvider.findChapterDir(
+            chapter.name,
+            chapter.scanlator,
+            chapter.url,
+            manga.title,
+            source,
+        ) ?: return 0
+
+        return try {
+            if (chapterDir.isFile) {
+                chapterDir.archiveReader(context).use { reader ->
+                    reader.useEntries { entries ->
+                        entries.count { it.isFile && it.name.hasPageExtension() }
+                    }
+                }
+            } else {
+                chapterDir.listFiles().orEmpty().count { it.isFile && it.name.hasPageExtension() }
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to count pages of downloaded chapter" }
+            0
+        }
+    }
+
+    private fun String?.hasPageExtension(): Boolean {
+        val extension = this?.substringAfterLast('.', "")?.lowercase() ?: return false
+        return extension in TranslationOptions.PAGE_EXTENSIONS
+    }
+
+    // Chapter translation - end
+
     fun markPreviousChapterRead(pointer: Chapter) {
         val manga = successState?.manga ?: return
         val chapters = filteredChapters.orEmpty().map { it.chapter }
@@ -1076,6 +1157,7 @@ class MangaViewModel(
         data object SettingsSheet : Dialog
         data object TrackSheet : Dialog
         data object FullCover : Dialog
+        data class TranslateChapter(val chapter: Chapter, val pageCount: Int) : Dialog
     }
 
     fun dismissDialog() {
@@ -1127,6 +1209,7 @@ class MangaViewModel(
             val dialog: Dialog? = null,
             val hasPromptedToAddBefore: Boolean = false,
             val hideMissingChapters: Boolean = false,
+            val translationEnabled: Boolean = false,
         ) : State {
             val processedChapters by lazy {
                 chapters.applyFilters(manga).toList()
