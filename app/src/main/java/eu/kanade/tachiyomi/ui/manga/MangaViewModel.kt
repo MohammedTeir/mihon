@@ -43,6 +43,7 @@ import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.translation.TranslationWorker
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
@@ -763,8 +764,10 @@ class MangaViewModel(
     }
 
     fun confirmTranslateChapter(chapter: Chapter) {
-        // TODO(Step 5): enqueue TranslationWorker.start(context, chapter.id) here.
-        logcat(LogPriority.DEBUG) { "Translate confirmed for chapter ${chapter.id} (worker not implemented yet)" }
+        TranslationWorker.start(context, chapter.id)
+        viewModelScope.launch {
+            snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_started))
+        }
     }
 
     /**
