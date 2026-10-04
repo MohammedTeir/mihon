@@ -1122,4 +1122,32 @@
     <string name="translation_confirm_title">Translate chapter?</string>
     <string name="translation_confirm_privacy">The pages will be uploaded to Google and translated into %1$s. Usage is billed to your own API key and may take a while.</string>
     <string name="translation_confirm_action">Translate</string>
+    <string name="translation_started">Translation started. You\'ll be notified when it finishes.</string>
+
+    <string name="translation_notification_progress_title">Translating %1$s (%2$d/%3$d)</string>
+    <string name="translation_notification_complete_title">Translation finished</string>
+    <string name="translation_notification_complete_text">%1$s was saved to the Local source as “%2$s”. Refresh the Local source list if it doesn\'t appear.</string>
+    <string name="translation_notification_already_text">%1$s is already in the Local source as “%2$s”. Delete it there first to translate it again.</string>
+    <string name="translation_notification_partial_title">Translated %1$d of %2$d pages</string>
+    <string name="translation_notification_partial_text">%1$s: %2$s. Tap Translate again to retry only the failed pages.</string>
+    <string name="translation_notification_error_title">Translation failed</string>
+
+    <string name="translation_reason_blocked">%1$d blocked by Google\'s content filters</string>
+    <string name="translation_reason_no_image">%1$d returned no image</string>
+    <string name="translation_reason_rate_limited">%1$d rate limited</string>
+    <string name="translation_reason_server">%1$d hit server errors</string>
+    <string name="translation_reason_network">%1$d timed out</string>
+    <string name="translation_reason_corrupt">%1$d unreadable</string>
+
+    <string name="translation_error_invalid_key">Google rejected your API key. Check it in Settings → Advanced → Chapter translation.</string>
+    <string name="translation_error_quota">Your Gemini quota or billing limit has been reached. Check your plan and billing in Google AI Studio, then try again later.</string>
+    <string name="translation_error_model">The selected model isn\'t available for your API key. Choose another model in Settings → Advanced → Chapter translation.</string>
+    <string name="translation_error_request">Google rejected the request: %1$s</string>
+    <string name="translation_error_offline">No internet connection. Translation will resume automatically when you\'re back online.</string>
+    <string name="translation_error_storage_low">Not enough free storage: %1$s needed, %2$s available.</string>
+    <string name="translation_error_storage_write">Couldn\'t write to the Local source folder. Check Mihon\'s storage location and free space.</string>
+    <string name="translation_error_local_unavailable">The Local source folder isn\'t available. Check Mihon\'s storage location.</string>
+    <string name="translation_error_empty_chapter">The downloaded chapter has no readable pages. Delete it and download it again.</string>
+    <string name="translation_error_corrupt_chapter">The downloaded chapter is corrupt or unreadable. Delete it and download it again.</string>
+    <string name="translation_error_unexpected">Unexpected error: %1$s</string>
 </resources>
