@@ -23,6 +23,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import dev.zacsweers.metrox.viewmodel.assistedMetroViewModel
 import eu.kanade.domain.manga.model.hasCustomCover
 import eu.kanade.domain.manga.model.toSManga
+import eu.kanade.domain.translation.TranslationOptions
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.NavigatorAdaptiveSheet
 import eu.kanade.presentation.manga.ChapterSettingsDialog
@@ -270,6 +271,9 @@ class MangaScreen(
                 TranslateChapterDialog(
                     pageCount = dialog.pageCount,
                     targetLanguage = remember { translationPreferences.targetLanguage().get() },
+                    overlayMode = remember {
+                        translationPreferences.mode().get() == TranslationOptions.MODE_OVERLAY
+                    },
                     onDismissRequest = onDismissRequest,
                     onConfirm = { viewModel.confirmTranslateChapter(dialog.chapter) },
                 )
