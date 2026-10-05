@@ -31,6 +31,7 @@ import eu.kanade.presentation.manga.DuplicateMangaDialog
 import eu.kanade.presentation.manga.EditCoverAction
 import eu.kanade.presentation.manga.MangaScreen
 import eu.kanade.presentation.manga.components.DeleteChaptersDialog
+import eu.kanade.presentation.manga.components.DeleteTranslatedChapterDialog
 import eu.kanade.presentation.manga.components.MangaCoverDialog
 import eu.kanade.presentation.manga.components.ScanlatorFilterDialog
 import eu.kanade.presentation.manga.components.SetIntervalDialog
@@ -58,10 +59,12 @@ import logcat.LogPriority
 import mihon.app.di.appGraph
 import mihon.feature.migration.config.MigrationConfigScreen
 import mihon.feature.migration.dialog.MigrateMangaDialog
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.model.Chapter
 import tachiyomi.domain.manga.model.Manga
+import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.screens.LoadingScreen
 
 class MangaScreen(
@@ -119,6 +122,19 @@ class MangaScreen(
             onChapterClicked = { openChapter(context, it) },
             onDownloadChapter = viewModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
             onTranslateChapter = viewModel::translateChapter,
+            onOpenTranslatedChapter = {
+                scope.launch {
+                    val id = viewModel.getTranslatedSeriesId()
+                    if (id != null) {
+                        navigator.push(MangaScreen(id))
+                    } else {
+                        viewModel.snackbarHostState.showSnackbar(
+                            context.stringResource(MR.strings.translation_open_failed),
+                        )
+                    }
+                }
+            },
+            onDeleteTranslatedChapter = viewModel::requestDeleteTranslatedChapter,
             onAddToLibraryClicked = {
                 viewModel.toggleFavorite()
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -266,6 +282,13 @@ class MangaScreen(
                 } else {
                     LoadingScreen(Modifier.systemBarsPadding())
                 }
+            }
+            is MangaViewModel.Dialog.DeleteTranslatedChapter -> {
+                DeleteTranslatedChapterDialog(
+                    chapterName = dialog.chapter.name,
+                    onDismissRequest = onDismissRequest,
+                    onConfirm = { viewModel.confirmDeleteTranslatedChapter(dialog.chapter) },
+                )
             }
             is MangaViewModel.Dialog.TranslateChapter -> {
                 TranslateChapterDialog(
