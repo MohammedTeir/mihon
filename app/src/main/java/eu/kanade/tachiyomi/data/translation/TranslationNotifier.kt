@@ -138,6 +138,10 @@ class TranslationNotifier(
                 ?.let { add(context.stringResource(MR.strings.translation_reason_blocked, it)) }
             failures.count { it is TranslationException.NoImageReturned }.takeIf { it > 0 }
                 ?.let { add(context.stringResource(MR.strings.translation_reason_no_image, it)) }
+            failures.count { it is TranslationException.UnreadableAnswer }.takeIf { it > 0 }
+                ?.let { add(context.stringResource(MR.strings.translation_reason_unreadable, it)) }
+            failures.count { it is TranslationException.QuotaExceeded }.takeIf { it > 0 }
+                ?.let { add(context.stringResource(MR.strings.translation_reason_daily_limit)) }
             failures.count { it is TranslationException.RateLimited }.takeIf { it > 0 }
                 ?.let { add(context.stringResource(MR.strings.translation_reason_rate_limited, it)) }
             failures.count { it is TranslationException.ServerError }.takeIf { it > 0 }
@@ -177,5 +181,6 @@ class TranslationNotifier(
         is TranslationException.ContentBlocked -> context.stringResource(MR.strings.translation_reason_blocked, 1)
         is TranslationException.NoImageReturned -> context.stringResource(MR.strings.translation_reason_no_image, 1)
         is TranslationException.CorruptPage -> context.stringResource(MR.strings.translation_reason_corrupt, 1)
+        is TranslationException.UnreadableAnswer -> context.stringResource(MR.strings.translation_reason_unreadable, 1)
     }
 }
