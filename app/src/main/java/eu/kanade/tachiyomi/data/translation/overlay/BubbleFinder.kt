@@ -62,9 +62,14 @@ object BubbleFinder {
         /** Minimum share of a growth strip that must lie inside the bubble. */
         val growthCoverage: Float = 0.97f,
         /** Open text (no bubble outline): how far the erased area may grow vertically over leftover ink. */
-        val inkExtendVertical: Float = 0.75f,
+        val inkExtendVertical: Float = 0.4f,
         /** Same, horizontally. Models are usually right about the width and wrong about the height. */
-        val inkExtendHorizontal: Float = 0.15f,
+        val inkExtendHorizontal: Float = 0.1f,
+        /**
+         * Open text: largest height of a connected group of lettering pixels. Bigger groups are artwork (faces,
+         * outlines, panel borders) and are never erased. The caller sets it from the page size.
+         */
+        val maxLetterSide: Int = Int.MAX_VALUE,
     )
 
     /** The part of the page that [find] needs pixels for. */
@@ -142,19 +147,29 @@ object BubbleFinder {
         val textColor = TextEraser.detectTextColor(pixels, w, paddedBox, background)
 
         if (textColor == null) {
-            val mask = BooleanArray(w * h)
-            fillRect(mask, w, paddedBox)
+            // Nothing stands out from the background, so there is nothing to erase. Better to leave the page
+            // alone than to paint a flat block over artwork.
             return BubbleRegion(
                 window = window,
-                mask = mask,
+                mask = BooleanArray(w * h),
                 background = background,
                 textRect = shrink(paddedBox, config.textMargin).offset(window.left, window.top),
                 fromFloodFill = false,
+                extent = paddedBox.offset(window.left, window.top),
             )
         }
 
         val cleared = extendOverLetters(pixels, w, h, paddedBox, background, textColor, config)
-        val erased = TextEraser.erase(pixels, w, h, cleared, background, textColor, TextEraser.dilationFor(box))
+        val erased = TextEraser.erase(
+            pixels,
+            w,
+            h,
+            cleared,
+            background,
+            textColor,
+            TextEraser.dilationFor(box),
+            config.maxLetterSide,
+        )
         return BubbleRegion(
             window = window,
             mask = erased.mask,
