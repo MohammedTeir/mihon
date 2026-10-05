@@ -74,6 +74,7 @@ object TextEraser {
         textColor: Int,
         dilation: Int,
         maxLetterSide: Int = Int.MAX_VALUE,
+        keepArea: PixelRect? = null,
     ): Result {
         val candidates = BooleanArray(w * h)
         for (y in area.top until area.bottom) {
@@ -81,7 +82,7 @@ object TextEraser {
                 if (isLetter(pixels[y * w + x], textColor, background)) candidates[y * w + x] = true
             }
         }
-        val letters = keepLetterSized(candidates, w, h, area, maxLetterSide)
+        val letters = keepLetterSized(candidates, w, h, area, maxLetterSide, keepArea)
 
         // Grow by a few pixels to take the soft anti-aliased edges with it.
         val mask = BooleanArray(w * h)
@@ -128,7 +129,8 @@ object TextEraser {
     /**
      * Keeps only connected groups of pixels that are small enough to be lettering. Outlines, panel borders, hair,
      * faces and other artwork of the same colour form groups that are much larger than a letter and are left alone.
-     * A group may be up to [maxLetterSide] tall and three times as wide (touching letters of one word).
+     * A group may be up to [maxLetterSide] tall and three times as wide (touching letters of one word), and its
+     * centre must lie inside [keepArea] when given.
      */
     private fun keepLetterSized(
         candidates: BooleanArray,
@@ -136,6 +138,7 @@ object TextEraser {
         h: Int,
         area: PixelRect,
         maxLetterSide: Int,
+        keepArea: PixelRect?,
     ): BooleanArray {
         val kept = BooleanArray(w * h)
         val seen = BooleanArray(w * h)
@@ -175,7 +178,10 @@ object TextEraser {
                         }
                     }
                 }
-                if (maxY - minY + 1 <= maxLetterSide && maxX - minX + 1 <= maxWidth) {
+                // Dashes of a bubble outline and similar marks lie outside the text box. Only groups whose centre is
+                // inside the box (plus a small margin) count as lettering.
+                val centered = keepArea == null || keepArea.contains((minX + maxX) / 2, (minY + maxY) / 2)
+                if (centered && maxY - minY + 1 <= maxLetterSide && maxX - minX + 1 <= maxWidth) {
                     for (i in 0 until tail) kept[queue[i]] = true
                 }
             }
@@ -190,6 +196,22 @@ object TextEraser {
             return (ca + (cb - ca) * t).toInt().coerceIn(0, 255)
         }
         return (0xFF shl 24) or (channel(16) shl 16) or (channel(8) shl 8) or channel(0)
+    }
+
+    /**
+     * Share of the masked pixels that are neither close to [background] nor clearly different from it. A flat
+     * bubble has almost none (only soft letter edges); a gradient, halftone or artwork has many.
+     */
+    fun midToneShare(pixels: IntArray, mask: BooleanArray, background: Int): Float {
+        var total = 0
+        var mid = 0
+        for (i in mask.indices) {
+            if (!mask[i]) continue
+            total++
+            val d = distance(pixels[i], background)
+            if (d > 24 && d < FAR_FROM_BACKGROUND) mid++
+        }
+        return if (total == 0) 0f else mid.toFloat() / total
     }
 
     internal fun distance(a: Int, b: Int): Int = max(
