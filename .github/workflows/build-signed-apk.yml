@@ -9,6 +9,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write           # needed to create a release
+
 jobs:
   build:
     name: Build
@@ -40,17 +43,32 @@ jobs:
       - name: Build
         run: ./gradlew assembleRelease -Pdist=github
         env:
+          MIHON_GITHUB_RELEASE: "true"
           storeFile: ${{ runner.temp }}/antsy.keystore
           storePassword: ${{ secrets.KEY_STORE_PASSWORD }}
           keyAlias: ${{ secrets.ALIAS }}
           keyPassword: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload APKs
+      - name: Upload APKs (workflow artifact)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mihon-signed
           path: app/build/outputs/apk/release/*.apk
           retention-days: 14
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="build-${{ github.run_number }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          # A re-run of the same build replaces its release instead of failing.
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" app/build/outputs/apk/release/*.apk \
+            --target "$GITHUB_SHA" \
+            --title "Mihon Translate build ${{ github.run_number }}" \
+            --notes "Commit $SHORT_SHA. Signed with the fixed key, so it installs as an update. Phones from the last 8 years: pick the arm64-v8a file." \
+            --prerelease
 
       - name: Remove keystore
         if: always()
