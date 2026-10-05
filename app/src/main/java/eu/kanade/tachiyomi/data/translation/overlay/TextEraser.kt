@@ -73,13 +73,15 @@ object TextEraser {
         background: Int,
         textColor: Int,
         dilation: Int,
+        maxLetterSide: Int = Int.MAX_VALUE,
     ): Result {
-        val letters = BooleanArray(w * h)
+        val candidates = BooleanArray(w * h)
         for (y in area.top until area.bottom) {
             for (x in area.left until area.right) {
-                if (isLetter(pixels[y * w + x], textColor, background)) letters[y * w + x] = true
+                if (isLetter(pixels[y * w + x], textColor, background)) candidates[y * w + x] = true
             }
         }
+        val letters = keepLetterSized(candidates, w, h, area, maxLetterSide)
 
         // Grow by a few pixels to take the soft anti-aliased edges with it.
         val mask = BooleanArray(w * h)
@@ -121,6 +123,64 @@ object TextEraser {
             }
         }
         return Result(mask, fill, textColor)
+    }
+
+    /**
+     * Keeps only connected groups of pixels that are small enough to be lettering. Outlines, panel borders, hair,
+     * faces and other artwork of the same colour form groups that are much larger than a letter and are left alone.
+     * A group may be up to [maxLetterSide] tall and three times as wide (touching letters of one word).
+     */
+    private fun keepLetterSized(
+        candidates: BooleanArray,
+        w: Int,
+        h: Int,
+        area: PixelRect,
+        maxLetterSide: Int,
+    ): BooleanArray {
+        val kept = BooleanArray(w * h)
+        val seen = BooleanArray(w * h)
+        val queue = IntArray(w * h)
+        val maxWidth = if (maxLetterSide == Int.MAX_VALUE) Int.MAX_VALUE else maxLetterSide * 3
+        for (startY in area.top until area.bottom) {
+            for (startX in area.left until area.right) {
+                val start = startY * w + startX
+                if (!candidates[start] || seen[start]) continue
+
+                var head = 0
+                var tail = 0
+                queue[tail++] = start
+                seen[start] = true
+                var minX = startX
+                var maxX = startX
+                var minY = startY
+                var maxY = startY
+                while (head < tail) {
+                    val index = queue[head++]
+                    val x = index % w
+                    val y = index / w
+                    minX = min(minX, x)
+                    maxX = max(maxX, x)
+                    minY = min(minY, y)
+                    maxY = max(maxY, y)
+                    for (dy in -1..1) {
+                        for (dx in -1..1) {
+                            val nx = x + dx
+                            val ny = y + dy
+                            if (nx < area.left || nx >= area.right || ny < area.top || ny >= area.bottom) continue
+                            val next = ny * w + nx
+                            if (candidates[next] && !seen[next]) {
+                                seen[next] = true
+                                queue[tail++] = next
+                            }
+                        }
+                    }
+                }
+                if (maxY - minY + 1 <= maxLetterSide && maxX - minX + 1 <= maxWidth) {
+                    for (i in 0 until tail) kept[queue[i]] = true
+                }
+            }
+        }
+        return kept
     }
 
     private fun blend(a: Int, b: Int, t: Float): Int {
