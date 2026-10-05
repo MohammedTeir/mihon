@@ -1,0 +1,154 @@
+package eu.kanade.tachiyomi.data.translation.overlay
+
+import dev.zacsweers.metro.AppScope
+import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import eu.kanade.tachiyomi.data.translation.GEMINI_BASE_URL
+import eu.kanade.tachiyomi.data.translation.GenerateContentRequest
+import eu.kanade.tachiyomi.data.translation.GenerationConfig
+import eu.kanade.tachiyomi.data.translation.NanoBananaClient
+import eu.kanade.tachiyomi.data.translation.NanoBananaResponseParser
+import eu.kanade.tachiyomi.data.translation.RequestContent
+import eu.kanade.tachiyomi.data.translation.RequestInlineData
+import eu.kanade.tachiyomi.data.translation.RequestPart
+import eu.kanade.tachiyomi.data.translation.TranslationException
+import eu.kanade.tachiyomi.data.translation.buildGeminiHttpClient
+import eu.kanade.tachiyomi.data.translation.isValidApiKey
+import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.POST
+import eu.kanade.tachiyomi.network.await
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.serialization.json.Json
+import okhttp3.Headers
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
+import java.util.Base64
+
+/**
+ * Free tier friendly translation mode: asks a Gemini text model for the position and translation of every text box
+ * on a page as JSON. The app draws the translation itself, see [PageOverlayRenderer].
+ *
+ * Requests are spaced out by a process wide [RequestPacer]. Neither the key nor image data is logged.
+ */
+@Inject
+@SingleIn(AppScope::class)
+class TextOverlayClient(
+    private val networkHelper: NetworkHelper,
+    private val json: Json,
+) {
+
+    private val client: OkHttpClient by lazy { buildGeminiHttpClient(networkHelper) }
+    private val pacer = RequestPacer()
+
+    /**
+     * @param baseIntervalMillis minimum time between two requests (0 for paid keys).
+     * @return all text boxes found on the page; empty if the page has no text.
+     * @throws TranslationException for all expected failures.
+     */
+    suspend fun detectAndTranslate(
+        image: ByteArray,
+        mimeType: String,
+        apiKey: String,
+        model: String,
+        language: String,
+        baseIntervalMillis: Long,
+    ): List<TextBox> {
+        if (!isValidApiKey(apiKey)) {
+            throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
+        }
+        val body = json.encodeToString(buildRequest(image, mimeType, language)).toRequestBody(JSON_MEDIA_TYPE)
+
+        var attempt = 0
+        while (true) {
+            pacer.awaitTurn(baseIntervalMillis)
+            try {
+                val boxes = executeOnce(body, apiKey, model)
+                pacer.onSuccess()
+                return boxes
+            } catch (e: TranslationException) {
+                if (e is TranslationException.RateLimited) pacer.onRateLimited(e.retryAfterMillis)
+                if (attempt >= e.maxRetries) throw e
+                attempt++
+                currentCoroutineContext().ensureActive()
+                // Rate limits are already handled by the pacer. Everything else gets a plain backoff.
+                if (e !is TranslationException.RateLimited) {
+                    delay(NanoBananaClient.backoffMillis(attempt, e.retryAfterMillis))
+                }
+            }
+        }
+    }
+
+    private suspend fun executeOnce(body: RequestBody, apiKey: String, model: String): List<TextBox> {
+        val request = POST(
+            url = "$GEMINI_BASE_URL/$model:generateContent",
+            headers = Headers.headersOf("x-goog-api-key", apiKey.trim()),
+            body = body,
+        )
+
+        val response = try {
+            client.newCall(request).await()
+        } catch (e: IOException) {
+            throw TranslationException.NetworkError(e)
+        }
+
+        response.use {
+            val text = try {
+                it.body.string()
+            } catch (e: IOException) {
+                throw TranslationException.NetworkError(e)
+            }
+            if (!it.isSuccessful) {
+                throw NanoBananaResponseParser.parseError(it.code, text, json, it.header("Retry-After"))
+            }
+            return OverlayResponseParser.parse(text, json)
+        }
+    }
+
+    companion object {
+        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+
+        /** Prompt sent with every page. Tweak here. `{language}` is replaced with the target language name. */
+        const val PROMPT_TEMPLATE =
+            "You are translating a manga or comic page. Find every piece of text on the page: speech bubbles, " +
+                "thought bubbles, narration or caption boxes and sound effects. Translate each into {language}.\n" +
+                "Rules:\n" +
+                "- Return one entry per bubble or text box, not one per line. Put all the original text of a " +
+                "bubble into one box.\n" +
+                "- \"box_2d\" is [ymin, xmin, ymax, xmax] on a 0-1000 grid, tightly around all the original text " +
+                "of that bubble.\n" +
+                "- \"kind\" is \"bubble\" for speech or thought bubbles, \"caption\" for narration boxes, " +
+                "\"sfx\" for sound effects and any lettering that is part of the artwork.\n" +
+                "- \"text\" is only the translation: natural, concise, no notes, no original text.\n" +
+                "- List the entries in reading order. Ignore watermarks and page numbers.\n" +
+                "Reply with JSON only, in this format: " +
+                "{\"boxes\":[{\"box_2d\":[ymin,xmin,ymax,xmax],\"kind\":\"bubble\",\"text\":\"...\"}]}\n" +
+                "If the page has no text reply {\"boxes\":[]}."
+
+        fun buildPrompt(language: String) = PROMPT_TEMPLATE.replace("{language}", language)
+
+        fun buildRequest(image: ByteArray, mimeType: String, language: String) = GenerateContentRequest(
+            contents = listOf(
+                RequestContent(
+                    parts = listOf(
+                        RequestPart(text = buildPrompt(language)),
+                        RequestPart(
+                            inlineData = RequestInlineData(
+                                mimeType = mimeType,
+                                data = Base64.getEncoder().encodeToString(image),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            generationConfig = GenerationConfig(
+                responseMimeType = "application/json",
+                temperature = 0.2,
+            ),
+        )
+    }
+}
