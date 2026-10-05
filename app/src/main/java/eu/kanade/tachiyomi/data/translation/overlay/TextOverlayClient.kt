@@ -128,6 +128,8 @@ class TextOverlayClient(
                 "game or system windows, signs, labels and any other readable text. Use \"sfx\" ONLY for large " +
                 "stylised onomatopoeia drawn as part of the artwork (impact or sound effects), never for sentences.\n" +
                 "- \"text\" is only the translation: natural, concise, no notes, no original text.\n" +
+                "- Proofread every translation before replying: correct spelling and standard grammar, no typos " +
+                "and no invented or misspelled words.\n" +
                 "- Include ALL text, also text outside bubbles on plain backgrounds, stylised, outlined, bold or " +
                 "coloured lettering, credits, website addresses, closing messages and chapter titles. Do not " +
                 "skip any line, even if it looks like a title or a decoration.\n" +
@@ -162,7 +164,7 @@ class TextOverlayClient(
             ),
             generationConfig = GenerationConfig(
                 responseMimeType = "application/json",
-                temperature = 0.2,
+                temperature = 0.1,
             ),
         )
     }
