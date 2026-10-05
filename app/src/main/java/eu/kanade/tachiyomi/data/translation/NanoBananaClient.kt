@@ -16,8 +16,6 @@ import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.Base64
-import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * Client for Google's Gemini image models ("Nano Banana") using the `generateContent` REST endpoint.
@@ -35,20 +33,7 @@ class NanoBananaClient(
     private val json: Json,
 ) {
 
-    private val client: OkHttpClient by lazy {
-        networkHelper.client.newBuilder()
-            .apply {
-                // Never let the header logger see the API key.
-                networkInterceptors().removeAll { it.javaClass.name.endsWith("HttpLoggingInterceptor") }
-                interceptors().removeAll { it.javaClass.name.endsWith("HttpLoggingInterceptor") }
-            }
-            .cache(null)
-            .connectTimeout(30.seconds)
-            .writeTimeout(2.minutes)
-            .readTimeout(3.minutes)
-            .callTimeout(5.minutes)
-            .build()
-    }
+    private val client: OkHttpClient by lazy { buildGeminiHttpClient(networkHelper) }
 
     /**
      * Sends one page for translation and returns the translated page.
@@ -66,9 +51,7 @@ class NanoBananaClient(
         model: String,
         language: String,
     ): TranslatedImage {
-        // OkHttp's "invalid header value" error message echoes the value, which would leak a mistyped key
-        // into logs and notifications. Reject anything that is not plain printable ASCII up front.
-        if (apiKey.isBlank() || apiKey.trim().any { it.code !in PRINTABLE_ASCII }) {
+        if (!isValidApiKey(apiKey)) {
             throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
         }
 
@@ -94,7 +77,7 @@ class NanoBananaClient(
         model: String,
     ): TranslatedImage {
         val request = POST(
-            url = "$BASE_URL/$model:generateContent",
+            url = "$GEMINI_BASE_URL/$model:generateContent",
             headers = Headers.headersOf("x-goog-api-key", apiKey.trim()),
             body = body,
         )
@@ -119,10 +102,7 @@ class NanoBananaClient(
     }
 
     companion object {
-        private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-
-        private val PRINTABLE_ASCII = 0x21..0x7E
 
         private const val BASE_BACKOFF_MILLIS = 2_000L
         private const val MAX_BACKOFF_MILLIS = 60_000L
