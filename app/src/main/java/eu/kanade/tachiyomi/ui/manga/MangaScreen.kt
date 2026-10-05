@@ -271,6 +271,8 @@ class MangaScreen(
                 TranslateChapterDialog(
                     pageCount = dialog.pageCount,
                     targetLanguage = remember { translationPreferences.targetLanguage().get() },
+                    glossaryText = remember { translationPreferences.glossary(dialog.chapter.mangaId).get() },
+                    onGlossarySave = { translationPreferences.glossary(dialog.chapter.mangaId).set(it.trim()) },
                     overlayMode = remember {
                         translationPreferences.mode().get() == TranslationOptions.MODE_OVERLAY
                     },
