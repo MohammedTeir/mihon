@@ -21,6 +21,8 @@ import eu.kanade.domain.translation.TranslationPreferences
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.data.translation.context.Glossary
+import eu.kanade.tachiyomi.data.translation.context.PromptContext
 import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
 import eu.kanade.tachiyomi.data.translation.overlay.PageOverlayRenderer
 import eu.kanade.tachiyomi.data.translation.overlay.TextOverlayClient
@@ -268,6 +270,10 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         val semaphore = Semaphore(if (overlay) 1 else MAX_PARALLEL_PAGES)
         val translateSfx = translationPreferences.translateSfx().get()
         val delayMillis = translationPreferences.requestDelaySeconds().get().coerceIn(0, 120) * 1000L
+        val glossary = Glossary.parse(translationPreferences.glossary(manga.id).get())
+        // Overlay mode runs one page at a time, so the text of the page before is known when the next one starts.
+        // Redraw mode runs pages in parallel and only sends the glossary.
+        var previousTexts: List<String> = emptyList()
         val failures = ConcurrentHashMap<Int, TranslationException>()
         val rateLimitFailures = AtomicInteger(0)
         val stopEarly = AtomicBoolean(false)
@@ -282,14 +288,17 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                             val bytes = readPage(page)
                             val upload = withContext(Dispatchers.Default) { prepareUpload(bytes, page.mimeType) }
                             val image = if (overlay) {
-                                val boxes = overlayClient.detectAndTranslate(
+                                val allBoxes = overlayClient.detectAndTranslate(
                                     upload.bytes,
                                     upload.mimeType,
                                     apiKey,
                                     model,
                                     language,
                                     delayMillis,
-                                ).filter { translateSfx || it.kind != BoxKind.SFX }
+                                    PromptContext.build(glossary, previousTexts),
+                                )
+                                previousTexts = allBoxes.map { it.text }
+                                val boxes = allBoxes.filter { translateSfx || it.kind != BoxKind.SFX }
                                 if (boxes.isEmpty()) {
                                     // Nothing to translate: keep the page as it is.
                                     TranslatedImage(bytes, page.mimeType)
@@ -300,7 +309,14 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                     TranslatedImage(rendered.bytes, rendered.mimeType)
                                 }
                             } else {
-                                client.translatePage(upload.bytes, upload.mimeType, apiKey, model, language)
+                                client.translatePage(
+                                    upload.bytes,
+                                    upload.mimeType,
+                                    apiKey,
+                                    model,
+                                    language,
+                                    PromptContext.build(glossary),
+                                )
                             }
                             writePage(stagingDir, index, indexWidth, image)
                             donePages.incrementAndGet()
