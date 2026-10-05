@@ -109,6 +109,38 @@ private fun GlossaryDialog(
 }
 
 @Composable
+fun DeleteTranslatedChapterDialog(
+    chapterName: String,
+    onDismissRequest: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onDismissRequest()
+                    onConfirm()
+                },
+            ) {
+                Text(text = stringResource(MR.strings.action_delete))
+            }
+        },
+        title = {
+            Text(text = stringResource(MR.strings.translation_delete_title))
+        },
+        text = {
+            Text(text = stringResource(MR.strings.translation_delete_text, chapterName))
+        },
+    )
+}
+
+@Composable
 fun TranslateChapterDialog(
     pageCount: Int,
     targetLanguage: String,
