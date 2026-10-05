@@ -21,6 +21,9 @@ import eu.kanade.domain.translation.TranslationPreferences
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
+import eu.kanade.tachiyomi.data.translation.overlay.PageOverlayRenderer
+import eu.kanade.tachiyomi.data.translation.overlay.TextOverlayClient
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
 import eu.kanade.tachiyomi.util.storage.DiskUtil
@@ -82,6 +85,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
     @Inject private lateinit var translationPreferences: TranslationPreferences
 
     @Inject private lateinit var client: NanoBananaClient
+
+    @Inject private lateinit var overlayClient: TextOverlayClient
 
     @Inject private lateinit var notifier: TranslationNotifier
 
@@ -182,7 +187,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
     private suspend fun translate(chapter: Chapter, manga: Manga, source: Source, apiKey: String): Outcome {
         val language = translationPreferences.targetLanguage().get()
-        val model = translationPreferences.model().get()
+        val overlay = translationPreferences.mode().get() == TranslationOptions.MODE_OVERLAY
+        val model = if (overlay) translationPreferences.textModel().get() else translationPreferences.model().get()
 
         val chapterDir = downloadProvider.findChapterDir(
             chapter.name,
@@ -195,7 +201,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         val reader = if (chapterDir.isFile) openArchive(chapterDir) else null
         try {
             val pages = listPages(chapterDir, reader)
-            return translatePages(chapter, manga, pages, apiKey, model, language)
+            return translatePages(chapter, manga, pages, apiKey, model, language, overlay)
         } finally {
             reader?.close()
         }
@@ -208,6 +214,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         apiKey: String,
         model: String,
         language: String,
+        overlay: Boolean,
     ): Outcome {
         val baseDir = localSourceFileSystem.getBaseDirectory() ?: throw TranslationException.LocalSourceUnavailable()
 
@@ -236,7 +243,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         donePages.set(finishedPages.size)
 
         val remaining = pages.size - finishedPages.size
-        val required = remaining * ESTIMATED_BYTES_PER_PAGE + STORAGE_HEADROOM_BYTES
+        val perPage = if (overlay) ESTIMATED_OVERLAY_BYTES_PER_PAGE else ESTIMATED_BYTES_PER_PAGE
+        val required = remaining * perPage + STORAGE_HEADROOM_BYTES
         val available = DiskUtil.getAvailableStorageSpace(baseDir)
         // `available` is -1 when it cannot be determined (for example some SAF providers). Write errors still
         // surface as StorageWriteFailed in that case.
@@ -256,7 +264,10 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         notifier.showProgress(id, chapter.name, donePages.get(), totalPages)
 
         val indexWidth = max(MIN_INDEX_WIDTH, pages.size.toString().length)
-        val semaphore = Semaphore(MAX_PARALLEL_PAGES)
+        // Overlay mode is paced by the free tier limits, so pages go one at a time.
+        val semaphore = Semaphore(if (overlay) 1 else MAX_PARALLEL_PAGES)
+        val translateSfx = translationPreferences.translateSfx().get()
+        val delayMillis = translationPreferences.requestDelaySeconds().get().coerceIn(0, 120) * 1000L
         val failures = ConcurrentHashMap<Int, TranslationException>()
         val rateLimitFailures = AtomicInteger(0)
         val stopEarly = AtomicBoolean(false)
@@ -270,12 +281,40 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                         try {
                             val bytes = readPage(page)
                             val upload = withContext(Dispatchers.Default) { prepareUpload(bytes, page.mimeType) }
-                            val image = client.translatePage(upload.bytes, upload.mimeType, apiKey, model, language)
+                            val image = if (overlay) {
+                                val boxes = overlayClient.detectAndTranslate(
+                                    upload.bytes,
+                                    upload.mimeType,
+                                    apiKey,
+                                    model,
+                                    language,
+                                    delayMillis,
+                                ).filter { translateSfx || it.kind != BoxKind.SFX }
+                                if (boxes.isEmpty()) {
+                                    // Nothing to translate: keep the page as it is.
+                                    TranslatedImage(bytes, page.mimeType)
+                                } else {
+                                    val rendered = withContext(Dispatchers.Default) {
+                                        PageOverlayRenderer.render(bytes, boxes)
+                                    }
+                                    TranslatedImage(rendered.bytes, rendered.mimeType)
+                                }
+                            } else {
+                                client.translatePage(upload.bytes, upload.mimeType, apiKey, model, language)
+                            }
                             writePage(stagingDir, index, indexWidth, image)
                             donePages.incrementAndGet()
                             notifier.showProgress(id, chapter.name, donePages.get(), totalPages)
                         } catch (e: TranslationException) {
-                            if (e.isFatal) throw e
+                            if (e.isFatal) {
+                                // Daily cap of the free tier reached after some pages: keep them, report "X of Y".
+                                if (overlay && e is TranslationException.QuotaExceeded && donePages.get() > 0) {
+                                    failures[index] = e
+                                    stopEarly.set(true)
+                                    return@withPermit
+                                }
+                                throw e
+                            }
                             if (e is TranslationException.NetworkError && !context.isOnline()) {
                                 throw TranslationException.Offline(e)
                             }
@@ -527,6 +566,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
         // Translated pages usually come back as PNG, which is far larger than the typical JPEG source.
         private const val ESTIMATED_BYTES_PER_PAGE = 3L * 1024 * 1024
+        private const val ESTIMATED_OVERLAY_BYTES_PER_PAGE = 3L * 1024 * 1024 / 2
         private const val STORAGE_HEADROOM_BYTES = 32L * 1024 * 1024
 
         /** Process wide: translations run one chapter at a time. */
