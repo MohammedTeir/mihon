@@ -70,9 +70,9 @@ sealed class TranslationException(message: String, cause: Throwable? = null) : E
         override val maxRetries get() = 1
     }
 
-    /** The text model answered, but not with the JSON the overlay mode expects. Retried once. */
+    /** The text model answered, but not with the JSON the overlay mode expects. Retried twice. */
     class UnreadableAnswer(detail: String?) : TranslationException("Unreadable answer: ${detail.orEmpty()}") {
-        override val maxRetries get() = 1
+        override val maxRetries get() = 2
     }
 
     /** A page that cannot be read or decoded. */
