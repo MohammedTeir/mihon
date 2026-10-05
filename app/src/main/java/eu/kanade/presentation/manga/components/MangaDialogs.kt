@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -65,13 +67,71 @@ fun DeleteChaptersDialog(
 }
 
 @Composable
+private fun GlossaryDialog(
+    initialText: String,
+    onDismissRequest: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf(initialText) }
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(text)
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(MR.strings.action_save))
+            }
+        },
+        title = {
+            Text(text = stringResource(MR.strings.translation_glossary_title))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small)) {
+                Text(text = stringResource(MR.strings.translation_glossary_help))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 4,
+                    maxLines = 10,
+                )
+            }
+        },
+    )
+}
+
+@Composable
 fun TranslateChapterDialog(
     pageCount: Int,
     targetLanguage: String,
     overlayMode: Boolean,
+    glossaryText: String,
+    onGlossarySave: (String) -> Unit,
     onDismissRequest: () -> Unit,
     onConfirm: () -> Unit,
 ) {
+    var glossary by remember { mutableStateOf(glossaryText) }
+    var editingGlossary by remember { mutableStateOf(false) }
+
+    if (editingGlossary) {
+        GlossaryDialog(
+            initialText = glossary,
+            onDismissRequest = { editingGlossary = false },
+            onSave = {
+                glossary = it
+                onGlossarySave(it)
+            },
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismissRequest,
         dismissButton = {
@@ -98,6 +158,9 @@ fun TranslateChapterDialog(
                 Text(text = stringResource(MR.strings.translation_confirm_privacy, targetLanguage))
                 if (overlayMode) {
                     Text(text = stringResource(MR.strings.translation_confirm_privacy_overlay))
+                }
+                TextButton(onClick = { editingGlossary = true }) {
+                    Text(text = stringResource(MR.strings.translation_glossary_edit))
                 }
             }
         },
