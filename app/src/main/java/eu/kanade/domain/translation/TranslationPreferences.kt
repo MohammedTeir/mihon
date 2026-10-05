@@ -24,4 +24,15 @@ class TranslationPreferences(
     )
 
     fun model() = preferenceStore.getString("pref_translation_model", TranslationOptions.DEFAULT_MODEL)
+
+    // "redraw" (Nano Banana image model, paid) or "overlay" (free text model, text drawn by the app).
+    fun mode() = preferenceStore.getString("pref_translation_mode", TranslationOptions.MODE_REDRAW)
+
+    fun textModel() = preferenceStore.getString("pref_translation_text_model", TranslationOptions.DEFAULT_TEXT_MODEL)
+
+    // Overlay mode: also translate sound effects (usually looks bad, so off by default).
+    fun translateSfx() = preferenceStore.getBoolean("pref_translation_sfx", false)
+
+    // Overlay mode: minimum pause between requests, to stay under free tier rate limits.
+    fun requestDelaySeconds() = preferenceStore.getInt("pref_translation_delay_seconds", 6)
 }
