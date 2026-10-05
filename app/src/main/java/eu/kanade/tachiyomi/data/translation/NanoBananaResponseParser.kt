@@ -9,7 +9,7 @@ import java.util.Base64
  */
 object NanoBananaResponseParser {
 
-    private val SAFETY_FINISH_REASONS = setOf(
+    internal val SAFETY_FINISH_REASONS = setOf(
         "SAFETY",
         "IMAGE_SAFETY",
         "IMAGE_PROHIBITED_CONTENT",
