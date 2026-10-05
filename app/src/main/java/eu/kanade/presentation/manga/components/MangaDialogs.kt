@@ -68,6 +68,7 @@ fun DeleteChaptersDialog(
 fun TranslateChapterDialog(
     pageCount: Int,
     targetLanguage: String,
+    overlayMode: Boolean,
     onDismissRequest: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -95,6 +96,9 @@ fun TranslateChapterDialog(
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small)) {
                 Text(text = pluralStringResource(MR.plurals.translation_confirm_pages, count = pageCount, pageCount))
                 Text(text = stringResource(MR.strings.translation_confirm_privacy, targetLanguage))
+                if (overlayMode) {
+                    Text(text = stringResource(MR.strings.translation_confirm_privacy_overlay))
+                }
             }
         },
     )
