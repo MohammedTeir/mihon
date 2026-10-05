@@ -43,6 +43,7 @@ import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.download.model.Download
 import eu.kanade.tachiyomi.data.track.EnhancedTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.data.translation.TranslationPaths
 import eu.kanade.tachiyomi.data.translation.TranslationWorker
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
@@ -70,6 +71,7 @@ import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
+import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.interactor.GetCategories
@@ -85,6 +87,7 @@ import tachiyomi.domain.chapter.service.getChapterSort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.GetDuplicateLibraryManga
 import tachiyomi.domain.manga.interactor.GetMangaWithChapters
+import tachiyomi.domain.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.manga.interactor.SetMangaChapterFlags
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.manga.model.MangaWithChapterCount
@@ -93,6 +96,8 @@ import tachiyomi.domain.manga.repository.MangaRepository
 import tachiyomi.domain.source.service.SourceManager
 import tachiyomi.domain.track.interactor.GetTracks
 import tachiyomi.i18n.MR
+import tachiyomi.source.local.LocalSource
+import tachiyomi.source.local.io.LocalSourceFileSystem
 import tachiyomi.source.local.isLocal
 import kotlin.math.floor
 
@@ -130,6 +135,8 @@ class MangaViewModel(
     private val coverCache: CoverCache,
     private val translationPreferences: TranslationPreferences,
     private val downloadProvider: DownloadProvider,
+    private val localSourceFileSystem: LocalSourceFileSystem,
+    private val networkToLocalManga: NetworkToLocalManga,
 ) : ViewModel() {
 
     val state: StateFlow<MangaViewModel.State>
@@ -200,7 +207,13 @@ class MangaViewModel(
                             chapters = chapters.toChapterListItems(manga),
                         )
                     }
+                    refreshTranslatedChapters()
                 }
+        }
+
+        viewModelScope.launchIO {
+            // A translation job started, finished or failed: look for new translated chapters.
+            TranslationWorker.workInfos(context).collectLatest { refreshTranslatedChapters() }
         }
 
         viewModelScope.launchIO {
@@ -770,6 +783,103 @@ class MangaViewModel(
         }
     }
 
+    // region Translated chapters in the Local source
+
+    private fun translatedSeriesName(manga: Manga): String = TranslationPaths.seriesName(
+        manga.title,
+        translationPreferences.targetLanguage().get(),
+        libraryPreferences.disallowNonAsciiFilenames.get(),
+    )
+
+    private fun translatedChapterFolder(chapter: Chapter): String = TranslationPaths.chapterFolder(
+        chapter.name,
+        libraryPreferences.disallowNonAsciiFilenames.get(),
+    )
+
+    /** Looks in the Local source for translated copies (in the language that is currently selected). */
+    private suspend fun refreshTranslatedChapters() {
+        val state = successState ?: return
+        if (state.manga.isLocal()) return
+
+        val ids = withIOContext {
+            try {
+                val series = localSourceFileSystem.getBaseDirectory()
+                    ?.findFile(translatedSeriesName(state.manga))
+                    ?.takeIf { it.isDirectory }
+                    ?: return@withIOContext emptySet()
+                val folders = series.listFiles().orEmpty()
+                    .filter { it.isDirectory }
+                    .mapNotNull { it.name }
+                    .toSet()
+                state.chapters
+                    .filter { translatedChapterFolder(it.chapter) in folders }
+                    .map { it.chapter.id }
+                    .toSet()
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Could not look for translated chapters" }
+                emptySet()
+            }
+        }
+        if (ids != successState?.translatedChapterIds) {
+            updateSuccessState { it.copy(translatedChapterIds = ids) }
+        }
+    }
+
+    /**
+     * Makes sure the translated series exists as a Local source entry in the library database and returns its id,
+     * so the screen can open it. Its chapter list is read from the folder when the screen opens.
+     */
+    suspend fun getTranslatedSeriesId(): Long? {
+        val manga = successState?.manga ?: return null
+        val name = translatedSeriesName(manga)
+        return withIOContext {
+            try {
+                val exists = localSourceFileSystem.getBaseDirectory()?.findFile(name)?.isDirectory == true
+                if (!exists) return@withIOContext null
+                networkToLocalManga(
+                    Manga.create().copy(source = LocalSource.ID, url = name, title = name),
+                ).id
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Could not open translated series" }
+                null
+            }
+        }
+    }
+
+    fun requestDeleteTranslatedChapter(item: ChapterList.Item) {
+        updateSuccessState { it.copy(dialog = Dialog.DeleteTranslatedChapter(item.chapter)) }
+    }
+
+    /** Deletes the translated copy of one chapter (and an empty series folder). The original is never touched. */
+    fun confirmDeleteTranslatedChapter(chapter: Chapter) {
+        val manga = successState?.manga ?: return
+        viewModelScope.launchIO {
+            val deleted = try {
+                val series = localSourceFileSystem.getBaseDirectory()
+                    ?.findFile(translatedSeriesName(manga))
+                    ?.takeIf { it.isDirectory }
+                val folder = translatedChapterFolder(chapter)
+                series?.findFile(folder)?.delete()
+                series?.findFile(TranslationPaths.STAGING_PREFIX + folder)?.delete()
+                val remaining = series?.listFiles().orEmpty()
+                    .count { it.isDirectory && it.name?.startsWith(".") != true }
+                if (series != null && remaining == 0) series.delete()
+                true
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Could not delete translated chapter" }
+                false
+            }
+            refreshTranslatedChapters()
+            snackbarHostState.showSnackbar(
+                message = context.stringResource(
+                    if (deleted) MR.strings.translation_deleted else MR.strings.translation_delete_failed,
+                ),
+            )
+        }
+    }
+
+    // endregion
+
     /**
      * Counts the image pages of a downloaded chapter, which is stored either as a folder or as a .cbz archive.
      */
@@ -1161,6 +1271,7 @@ class MangaViewModel(
         data object TrackSheet : Dialog
         data object FullCover : Dialog
         data class TranslateChapter(val chapter: Chapter, val pageCount: Int) : Dialog
+        data class DeleteTranslatedChapter(val chapter: Chapter) : Dialog
     }
 
     fun dismissDialog() {
@@ -1213,6 +1324,7 @@ class MangaViewModel(
             val hasPromptedToAddBefore: Boolean = false,
             val hideMissingChapters: Boolean = false,
             val translationEnabled: Boolean = false,
+            val translatedChapterIds: Set<Long> = emptySet(),
         ) : State {
             val processedChapters by lazy {
                 chapters.applyFilters(manga).toList()
