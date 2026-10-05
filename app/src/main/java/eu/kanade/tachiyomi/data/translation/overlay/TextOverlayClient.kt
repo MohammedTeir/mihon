@@ -57,11 +57,12 @@ class TextOverlayClient(
         model: String,
         language: String,
         baseIntervalMillis: Long,
+        promptContext: String = "",
     ): List<TextBox> {
         if (!isValidApiKey(apiKey)) {
             throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
         }
-        val body = json.encodeToString(buildRequest(image, mimeType, language)).toRequestBody(JSON_MEDIA_TYPE)
+        val body = json.encodeToString(buildRequest(image, mimeType, language, promptContext)).toRequestBody(JSON_MEDIA_TYPE)
 
         var attempt = 0
         while (true) {
@@ -129,13 +130,21 @@ class TextOverlayClient(
                 "{\"boxes\":[{\"box_2d\":[ymin,xmin,ymax,xmax],\"kind\":\"bubble\",\"text\":\"...\"}]}\n" +
                 "If the page has no text reply {\"boxes\":[]}."
 
-        fun buildPrompt(language: String) = PROMPT_TEMPLATE.replace("{language}", language)
+        fun buildPrompt(language: String, extra: String = ""): String {
+            val prompt = PROMPT_TEMPLATE.replace("{language}", language)
+            return if (extra.isBlank()) prompt else "$prompt\n\n$extra"
+        }
 
-        fun buildRequest(image: ByteArray, mimeType: String, language: String) = GenerateContentRequest(
+        fun buildRequest(
+            image: ByteArray,
+            mimeType: String,
+            language: String,
+            extra: String = "",
+        ) = GenerateContentRequest(
             contents = listOf(
                 RequestContent(
                     parts = listOf(
-                        RequestPart(text = buildPrompt(language)),
+                        RequestPart(text = buildPrompt(language, extra)),
                         RequestPart(
                             inlineData = RequestInlineData(
                                 mimeType = mimeType,
