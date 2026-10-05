@@ -222,13 +222,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         val baseDir = localSourceFileSystem.getBaseDirectory() ?: throw TranslationException.LocalSourceUnavailable()
 
         val disallowNonAscii = libraryPreferences.disallowNonAsciiFilenames.get()
-        val seriesName = DiskUtil.buildValidFilename("${manga.title} ($language)", disallowNonAscii = disallowNonAscii)
-        val chapterFolder = DiskUtil.buildValidFilename(
-            chapter.name,
-            DiskUtil.MAX_FILE_NAME_BYTES - STAGING_PREFIX.length,
-            disallowNonAscii,
-        )
-        val stagingName = STAGING_PREFIX + chapterFolder
+        val seriesName = TranslationPaths.seriesName(manga.title, language, disallowNonAscii)
+        val chapterFolder = TranslationPaths.chapterFolder(chapter.name, disallowNonAscii)
+        val stagingName = TranslationPaths.STAGING_PREFIX + chapterFolder
 
         val existingSeries = baseDir.findFile(seriesName)?.takeIf { it.isDirectory }
 
@@ -587,7 +583,6 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         private const val TAG = "Translation"
         private const val KEY_CHAPTER_ID = "chapter_id"
 
-        private const val STAGING_PREFIX = ".translating-"
         private const val TMP_SUFFIX = ".tmp"
         private const val COVER_NAME = "cover.jpg"
         private const val MIN_INDEX_WIDTH = 3
@@ -634,6 +629,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                 .build()
             context.workManager.enqueueUniqueWork(uniqueName(chapterId), ExistingWorkPolicy.KEEP, request)
         }
+
+        /** Emits whenever a translation job is queued, runs, finishes or fails. Used to refresh the chapter list. */
+        fun workInfos(context: Context) = context.workManager.getWorkInfosByTagFlow(TAG)
 
         fun stop(context: Context, chapterId: Long) {
             context.workManager.cancelUniqueWork(uniqueName(chapterId))
