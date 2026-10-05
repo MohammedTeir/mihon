@@ -258,6 +258,31 @@ class BubbleFinderTest {
     }
 
     @Test
+    fun `dashes of a leaky bubble outline are not erased`() {
+        val page = Page(400, 300, white)
+        // Dashed ellipse: 10 px dashes with 10 px gaps, so the flood fill leaks through the gaps
+        val cx = 200
+        val cy = 150
+        for (step in 0 until 360 step 3) {
+            if ((step / 3) % 2 == 0) continue
+            val rad = Math.toRadians(step.toDouble())
+            val x = (cx + 150 * Math.cos(rad)).toInt()
+            val y = (cy + 100 * Math.sin(rad)).toInt()
+            page.text(PixelRect(x - 1, y - 1, x + 2, y + 2), black)
+        }
+        page.text(PixelRect(150, 140, 250, 160), black)
+        val box = PixelRect(150, 135, 250, 165)
+
+        val region = find(page, box, BubbleFinder.Config(maxLetterSide = 40))
+
+        val w = region.window.width
+        fun masked(x: Int, y: Int) = region.mask[(y - region.window.top) * w + (x - region.window.left)]
+        assertTrue(masked(200, 150)) // text is erased
+        val outline = (cx + 150) to cy
+        assertFalse(masked(outline.first, outline.second))
+    }
+
+    @Test
     fun `boxes in the same bubble are grouped and boxes in other bubbles are not`() {
         val page = Page(400, 200, 0xFF808080.toInt())
         page.ellipse(100, 100, 70, 60, white, black)
