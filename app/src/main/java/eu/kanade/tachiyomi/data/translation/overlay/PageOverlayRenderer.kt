@@ -92,7 +92,7 @@ object PageOverlayRenderer {
 
         val canvas = Canvas(bitmap)
         val erase = Paint().apply { style = Paint.Style.FILL }
-        for (item in items) paintMask(canvas, erase, item.region)
+        for (item in items) paintMask(bitmap, canvas, erase, item.region)
         for (item in items) drawText(canvas, item.text, item.region, bitmap.width)
     }
 
@@ -104,10 +104,22 @@ object PageOverlayRenderer {
     }
 
     /** Fills the mask with the bubble colour, one horizontal run at a time. */
-    private fun paintMask(canvas: Canvas, paint: Paint, region: BubbleRegion) {
-        paint.color = region.background
+    private fun paintMask(bitmap: Bitmap, canvas: Canvas, paint: Paint, region: BubbleRegion) {
         val w = region.window.width
         val h = region.window.height
+        val fill = region.fill
+        if (fill != null) {
+            // Open text: replace the letters only, each pixel with its own colour.
+            for (y in 0 until h) {
+                for (x in 0 until w) {
+                    if (region.mask[y * w + x]) {
+                        bitmap.setPixel(region.window.left + x, region.window.top + y, fill[y * w + x])
+                    }
+                }
+            }
+            return
+        }
+        paint.color = region.background
         for (y in 0 until h) {
             var x = 0
             while (x < w) {
@@ -133,8 +145,12 @@ object PageOverlayRenderer {
         val area = region.textRect
         if (clean.isEmpty() || area.isEmpty) return
 
+        // Open text keeps the colour of the original lettering and gets a thin contrasting outline, so it stays
+        // readable on gradients and artwork. Bubbles use black or white depending on their colour.
+        val letterColor = region.textColor
         val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (luminance(region.background) < LUMINANCE_DARK_BACKGROUND) Color.WHITE else Color.BLACK
+            color = letterColor
+                ?: if (luminance(region.background) < LUMINANCE_DARK_BACKGROUND) Color.WHITE else Color.BLACK
             typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         }
 
@@ -150,6 +166,17 @@ object PageOverlayRenderer {
         canvas.clipRect(area.left.toFloat(), area.top.toFloat(), area.right.toFloat(), area.bottom.toFloat())
         val top = area.top + (area.height - layout.height) / 2f
         canvas.translate(area.left.toFloat(), max(area.top.toFloat(), top))
+        if (letterColor != null) {
+            val outlinePaint = TextPaint(paint).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = max(1.5f, size * 0.12f)
+                strokeJoin = Paint.Join.ROUND
+                color = if (luminance(letterColor) < LUMINANCE_DARK_BACKGROUND) Color.WHITE else Color.BLACK
+            }
+            layoutFor(clean, outlinePaint, size, area.width).draw(canvas)
+            // layoutFor() set the size on the paint it was given, keep the fill paint in sync.
+            paint.textSize = size
+        }
         layout.draw(canvas)
         canvas.restore()
     }
