@@ -355,38 +355,102 @@ object SettingsAdvancedScreen : SearchableSettings {
         val apiKeyPref = remember { translationPreferences.apiKey() }
         val modelPref = remember { translationPreferences.model() }
         val targetLanguagePref = remember { translationPreferences.targetLanguage() }
+        val modePref = remember { translationPreferences.mode() }
+        val textModelPref = remember { translationPreferences.textModel() }
+        val sfxPref = remember { translationPreferences.translateSfx() }
+        val delayPref = remember { translationPreferences.requestDelaySeconds() }
 
         val apiKey by apiKeyPref.collectAsState()
+        val mode by modePref.collectAsState()
+        val overlay = mode == TranslationOptions.MODE_OVERLAY
+
+        val modeEntries = mapOf(
+            TranslationOptions.MODE_REDRAW to stringResource(MR.strings.pref_translation_mode_redraw),
+            TranslationOptions.MODE_OVERLAY to stringResource(MR.strings.pref_translation_mode_overlay),
+        )
+        val delayEntries = TranslationOptions.REQUEST_DELAYS.associateWith {
+            if (it == 0) {
+                stringResource(MR.strings.translation_delay_none)
+            } else {
+                stringResource(MR.strings.translation_delay_seconds, it)
+            }
+        }
 
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.pref_category_translation),
-            preferenceItems = listOf(
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = enabledPref,
-                    title = stringResource(MR.strings.pref_translation_enable),
-                    subtitle = stringResource(MR.strings.pref_translation_enable_summary),
-                ),
-                Preference.PreferenceItem.EditTextPreference(
-                    preference = apiKeyPref,
-                    title = stringResource(MR.strings.pref_translation_api_key),
-                    // Fixed subtitle without "%s" so the stored key is never shown in the list.
-                    subtitle = if (apiKey.isBlank()) {
-                        stringResource(MR.strings.pref_translation_api_key_not_set)
-                    } else {
-                        stringResource(MR.strings.pref_translation_api_key_set)
-                    },
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = modelPref,
-                    entries = TranslationOptions.MODELS,
-                    title = stringResource(MR.strings.pref_translation_model),
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = targetLanguagePref,
-                    entries = TranslationOptions.LANGUAGES.associateWith { it },
-                    title = stringResource(MR.strings.pref_translation_target_language),
-                ),
-            ),
+            preferenceItems = buildList {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = enabledPref,
+                        title = stringResource(MR.strings.pref_translation_enable),
+                        subtitle = stringResource(MR.strings.pref_translation_enable_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.EditTextPreference(
+                        preference = apiKeyPref,
+                        title = stringResource(MR.strings.pref_translation_api_key),
+                        // Fixed subtitle without "%s" so the stored key is never shown in the list.
+                        subtitle = if (apiKey.isBlank()) {
+                            stringResource(MR.strings.pref_translation_api_key_not_set)
+                        } else {
+                            stringResource(MR.strings.pref_translation_api_key_set)
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = modePref,
+                        entries = modeEntries,
+                        title = stringResource(MR.strings.pref_translation_mode),
+                    ),
+                )
+                if (overlay) {
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = textModelPref,
+                            entries = TranslationOptions.TEXT_MODELS,
+                            title = stringResource(MR.strings.pref_translation_text_model),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = sfxPref,
+                            title = stringResource(MR.strings.pref_translation_sfx),
+                            subtitle = stringResource(MR.strings.pref_translation_sfx_summary),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = delayPref,
+                            entries = delayEntries,
+                            title = stringResource(MR.strings.pref_translation_delay),
+                        ),
+                    )
+                } else {
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = modelPref,
+                            entries = TranslationOptions.MODELS,
+                            title = stringResource(MR.strings.pref_translation_model),
+                        ),
+                    )
+                }
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = targetLanguagePref,
+                        entries = TranslationOptions.LANGUAGES.associateWith { it },
+                        title = stringResource(MR.strings.pref_translation_target_language),
+                    ),
+                )
+                if (overlay) {
+                    add(
+                        Preference.PreferenceItem.InfoPreference(
+                            stringResource(MR.strings.pref_translation_free_privacy),
+                        ),
+                    )
+                }
+            },
         )
     }
 
