@@ -1110,17 +1110,28 @@
     <!-- Chapter translation -->
     <string name="pref_category_translation">Chapter translation</string>
     <string name="pref_translation_enable">Enable chapter translation</string>
-    <string name="pref_translation_enable_summary">Adds a Translate button to downloaded chapters. Page images are uploaded to Google for translation, and usage is billed to your own Gemini API key.</string>
+    <string name="pref_translation_enable_summary">Adds a Translate button to downloaded chapters. Page images are uploaded to Google for translation using your own Gemini API key.</string>
     <string name="pref_translation_api_key">Gemini API key</string>
     <string name="pref_translation_api_key_set">Key saved (hidden)</string>
     <string name="pref_translation_api_key_not_set">Not set</string>
     <string name="pref_translation_model">Image model</string>
+    <string name="pref_translation_mode">Translation mode</string>
+    <string name="pref_translation_mode_redraw">Redraw page (image model, paid)</string>
+    <string name="pref_translation_mode_overlay">Overlay text (free text model)</string>
+    <string name="pref_translation_text_model">Text model</string>
+    <string name="pref_translation_sfx">Translate sound effects</string>
+    <string name="pref_translation_sfx_summary">Usually looks worse than the original lettering, so it\'s off by default</string>
+    <string name="pref_translation_delay">Pause between pages</string>
+    <string name="pref_translation_free_privacy">On Google\'s free tier, the pages you upload may be used to improve Google\'s products, including human review. Don\'t use free mode for pages you consider private. Free mode is slow on purpose (rate limits and a daily cap) and the result is rougher than redrawing: text on artwork, tall narrow bubbles and slightly misplaced boxes can look wrong.</string>
+    <string name="translation_delay_none">No pause</string>
+    <string name="translation_delay_seconds">%1$d seconds</string>
     <string name="pref_translation_target_language">Target language</string>
     <string name="action_translate_chapter">Translate chapter</string>
     <string name="translation_api_key_missing">Set your Gemini API key in Settings → Advanced → Chapter translation first</string>
     <string name="translation_no_pages">No pages found in this downloaded chapter</string>
     <string name="translation_confirm_title">Translate chapter?</string>
     <string name="translation_confirm_privacy">The pages will be uploaded to Google and translated into %1$s. Usage is billed to your own API key and may take a while.</string>
+    <string name="translation_confirm_privacy_overlay">Free mode: on Google\'s free tier the pages may be used to improve Google\'s products. Pages are processed slowly, and the daily cap may stop the job early. Finished pages are kept.</string>
     <string name="translation_confirm_action">Translate</string>
     <string name="translation_started">Translation started. You\'ll be notified when it finishes.</string>
 
@@ -1137,6 +1148,8 @@
     <string name="translation_reason_rate_limited">%1$d rate limited</string>
     <string name="translation_reason_server">%1$d hit server errors</string>
     <string name="translation_reason_network">%1$d timed out</string>
+    <string name="translation_reason_unreadable">%1$d got an unreadable answer</string>
+    <string name="translation_reason_daily_limit">daily limit reached</string>
     <string name="translation_reason_corrupt">%1$d unreadable</string>
 
     <string name="translation_error_invalid_key">Google rejected your API key. Check it in Settings → Advanced → Chapter translation.</string>
