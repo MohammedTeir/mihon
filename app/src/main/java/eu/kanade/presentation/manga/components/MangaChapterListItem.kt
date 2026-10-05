@@ -1,5 +1,6 @@
 package eu.kanade.presentation.manga.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -72,6 +73,9 @@ fun MangaChapterListItem(
     onDownloadClick: ((ChapterDownloadAction) -> Unit)?,
     translateButtonVisible: Boolean,
     onTranslateClick: () -> Unit,
+    translatedAvailable: Boolean,
+    onOpenTranslatedClick: () -> Unit,
+    onDeleteTranslatedClick: () -> Unit,
     onChapterSwipe: (LibraryPreferences.ChapterSwipeAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -181,8 +185,26 @@ fun MangaChapterListItem(
                 }
             }
 
-            if (translateButtonVisible && downloadStateProvider() == Download.State.DOWNLOADED) {
-                TranslateChapterButton(
+            if (translateButtonVisible && translatedAvailable) {
+                // A translated copy exists in the Local source: open it or delete it.
+                ChapterIconButton(
+                    iconRes = R.drawable.ic_open_translated_24dp,
+                    contentDescription = stringResource(MR.strings.action_open_translated_chapter),
+                    enabled = downloadIndicatorEnabled,
+                    modifier = Modifier.padding(start = 4.dp),
+                    onClick = onOpenTranslatedClick,
+                )
+                ChapterIconButton(
+                    iconRes = R.drawable.ic_delete_translated_24dp,
+                    contentDescription = stringResource(MR.strings.action_delete_translated_chapter),
+                    enabled = downloadIndicatorEnabled,
+                    modifier = Modifier.padding(start = 4.dp),
+                    onClick = onDeleteTranslatedClick,
+                )
+            } else if (translateButtonVisible && downloadStateProvider() == Download.State.DOWNLOADED) {
+                ChapterIconButton(
+                    iconRes = R.drawable.ic_translate_24dp,
+                    contentDescription = stringResource(MR.strings.action_translate_chapter),
                     enabled = downloadIndicatorEnabled,
                     modifier = Modifier.padding(start = 4.dp),
                     onClick = onTranslateClick,
@@ -201,7 +223,9 @@ fun MangaChapterListItem(
 }
 
 @Composable
-private fun TranslateChapterButton(
+private fun ChapterIconButton(
+    @DrawableRes iconRes: Int,
+    contentDescription: String,
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -222,8 +246,8 @@ private fun TranslateChapterButton(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            painter = painterResource(R.drawable.ic_translate_24dp),
-            contentDescription = stringResource(MR.strings.action_translate_chapter),
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
             modifier = Modifier.size(24.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
