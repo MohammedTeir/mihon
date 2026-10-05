@@ -32,7 +32,9 @@ data class RequestInlineData(
 
 @Serializable
 data class GenerationConfig(
-    val responseModalities: List<String>,
+    val responseModalities: List<String>? = null,
+    val responseMimeType: String? = null,
+    val temperature: Double? = null,
 )
 
 // endregion
