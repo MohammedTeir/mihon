@@ -23,6 +23,28 @@ object TranslationOptions {
         MODEL_LEGACY_FLASH_IMAGE to "Nano Banana 2.5 Flash ($MODEL_LEGACY_FLASH_IMAGE)",
     )
 
+    const val MODE_REDRAW = "redraw"
+    const val MODE_OVERLAY = "overlay"
+
+    /** Mode id -> string resource is resolved in the settings screen. */
+    val MODES: List<String> = listOf(MODE_REDRAW, MODE_OVERLAY)
+
+    /**
+     * Text models for overlay mode. Which of them are free depends on Google's current free tier, so the list
+     * is only a suggestion. Verify in Google AI Studio.
+     */
+    const val DEFAULT_TEXT_MODEL = "gemini-3.5-flash-lite"
+
+    val TEXT_MODELS: Map<String, String> = linkedMapOf(
+        "gemini-3.8-flash" to "Gemini 3.8 Flash",
+        "gemini-3.6-flash" to "Gemini 3.6 Flash",
+        "gemini-3.5-flash-lite" to "Gemini 3.5 Flash Lite",
+        "gemini-3.1-flash-lite" to "Gemini 3.1 Flash Lite",
+    )
+
+    /** Pause between overlay requests, in seconds. */
+    val REQUEST_DELAYS: List<Int> = listOf(0, 3, 6, 12)
+
     const val DEFAULT_LANGUAGE = "English"
 
     /** Image file extensions (lowercase) that count as pages of a downloaded chapter. */
