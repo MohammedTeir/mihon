@@ -125,9 +125,13 @@ class TextOverlayClient(
                 "- \"box_2d\" is [ymin, xmin, ymax, xmax] on a 0-1000 grid, tightly around all the original text " +
                 "of that bubble.\n" +
                 "- \"kind\" is \"bubble\" for speech or thought bubbles, \"caption\" for narration boxes, " +
-                "\"sfx\" for sound effects and any lettering that is part of the artwork.\n" +
+                "game or system windows, signs, labels and any other readable text. Use \"sfx\" ONLY for large " +
+                "stylised onomatopoeia drawn as part of the artwork (impact or sound effects), never for sentences.\n" +
                 "- \"text\" is only the translation: natural, concise, no notes, no original text.\n" +
-                "- List the entries in reading order. Ignore watermarks and page numbers.\n" +
+                "- Include ALL text, also text outside bubbles on plain backgrounds, stylised, outlined, bold or " +
+                "coloured lettering, credits, website addresses, closing messages and chapter titles. Do not " +
+                "skip any line, even if it looks like a title or a decoration.\n" +
+                "- List the entries in reading order. Ignore page numbers.\n" +
                 "Reply with JSON only, in this format: " +
                 "{\"boxes\":[{\"box_2d\":[ymin,xmin,ymax,xmax],\"kind\":\"bubble\",\"text\":\"...\"}]}\n" +
                 "If the page has no text reply {\"boxes\":[]}."
