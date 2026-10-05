@@ -50,9 +50,9 @@ class BubbleFinderTest {
         private fun sq(v: Double) = v * v
     }
 
-    private fun find(page: Page, box: PixelRect): BubbleRegion {
+    private fun find(page: Page, box: PixelRect, config: BubbleFinder.Config = BubbleFinder.Config()): BubbleRegion {
         val window = BubbleFinder.windowFor(box, page.bounds)
-        return BubbleFinder.find(page.window(window), window, box)
+        return BubbleFinder.find(page.window(window), window, box, config)
     }
 
     @Test
@@ -224,6 +224,37 @@ class BubbleFinderTest {
             assertTrue(abs(blue - expectedBlue) <= 6, "row $y: $blue vs $expectedBlue")
         }
         assertEquals(white, region.textColor)
+    }
+
+    @Test
+    fun `artwork of the lettering colour is not erased`() {
+        val page = Page(400, 300, white)
+        // Letters: small dark groups in a row
+        for (i in 0 until 8) page.text(PixelRect(100 + i * 25, 140, 100 + i * 25 + 14, 160), black)
+        // A big dark blob (a face or hair) and a long thin line (a panel border) inside the same loose box
+        page.text(PixelRect(110, 200, 190, 280), black)
+        for (x in 60 until 340) page.pixels[120 * 400 + x] = black
+        val box = PixelRect(60, 110, 340, 290)
+
+        val config = BubbleFinder.Config(maxLetterSide = 28)
+        val region = find(page, box, config)
+        val w = region.window.width
+        fun masked(x: Int, y: Int) = region.mask[(y - region.window.top) * w + (x - region.window.left)]
+
+        assertTrue(masked(106, 150)) // a letter
+        assertFalse(masked(150, 240)) // inside the blob
+        assertFalse(masked(200, 120)) // on the long line
+    }
+
+    @Test
+    fun `nothing is erased when nothing stands out from the background`() {
+        val page = Page(200, 200, white)
+        val box = PixelRect(60, 80, 140, 120)
+
+        val region = find(page, box)
+
+        assertFalse(region.fromFloodFill)
+        assertTrue(region.mask.none { it })
     }
 
     @Test
