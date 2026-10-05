@@ -27,6 +27,9 @@ object PageOverlayRenderer {
     class Result(val bytes: ByteArray, val mimeType: String)
 
     private const val MAX_SIDE = 4096
+
+    /** Lettering is never taller than this share of the page width. Anything bigger is artwork. */
+    private const val MAX_LETTER_SIDE_RATIO = 0.07f
     private const val OUTPUT_QUALITY = 93
     private const val LUMINANCE_DARK_BACKGROUND = 110
 
@@ -100,7 +103,8 @@ object PageOverlayRenderer {
         val window = BubbleFinder.windowFor(box, image)
         val pixels = IntArray(window.width * window.height)
         bitmap.getPixels(pixels, 0, window.width, window.left, window.top, window.width, window.height)
-        return BubbleFinder.find(pixels, window, box)
+        val config = BubbleFinder.Config(maxLetterSide = (bitmap.width * MAX_LETTER_SIDE_RATIO).toInt())
+        return BubbleFinder.find(pixels, window, box, config)
     }
 
     /** Fills the mask with the bubble colour, one horizontal run at a time. */
