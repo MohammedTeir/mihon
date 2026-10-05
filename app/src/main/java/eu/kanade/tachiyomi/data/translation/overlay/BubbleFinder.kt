@@ -11,7 +11,7 @@ import kotlin.math.min
  * @property mask `window.width * window.height` flags, true for pixels that must be repainted with [background].
  * @property background colour of the bubble (ARGB).
  * @property textRect where the translation is drawn, in page coordinates.
- * @property fromFloodFill false when the bubble could not be traced and only the padded text box is used.
+ * @property fromFloodFill false when the bubble could not be traced (open text). Then only the letters are erased.
  */
 class BubbleRegion(
     val window: PixelRect,
@@ -19,9 +19,16 @@ class BubbleRegion(
     val background: Int,
     val textRect: PixelRect,
     val fromFloodFill: Boolean,
+    /** When set, the mask pixels are replaced with these colours (window sized) instead of [background]. */
+    val fill: IntArray? = null,
+    /** Colour of the original lettering when it was detected (open text), else null. */
+    val textColor: Int? = null,
+    /** Area that counts as belonging to this region for grouping, when the mask only holds the letters. */
+    val extent: PixelRect? = null,
 ) {
-    /** True if the page pixel ([x], [y]) is part of this bubble. */
+    /** True if the page pixel ([x], [y]) belongs to this bubble. */
     fun contains(x: Int, y: Int): Boolean {
+        if (extent != null) return extent.contains(x, y)
         if (!window.contains(x, y)) return false
         return mask[(y - window.top) * window.width + (x - window.left)]
     }
@@ -34,7 +41,7 @@ class BubbleRegion(
  * 1. Sample the bubble colour just inside and just outside the box edge (median per channel).
  * 2. Flood fill outwards from the box edge through pixels of that colour until the bubble outline stops it.
  * 3. Add the whole padded box and any holes (letters that stick out), so no old text is left.
- * 4. If the fill leaked (open bubble, page background) fall back to the padded box only.
+ * 4. If the fill leaked (open bubble, page background) treat it as open text and erase only the letters.
  * 5. Grow a rectangle from the box centre inside the traced area. The translation is drawn there.
  */
 object BubbleFinder {
@@ -54,6 +61,10 @@ object BubbleFinder {
         val textMargin: Float = 0.05f,
         /** Minimum share of a growth strip that must lie inside the bubble. */
         val growthCoverage: Float = 0.97f,
+        /** Open text (no bubble outline): how far the erased area may grow vertically over leftover ink. */
+        val inkExtendVertical: Float = 0.75f,
+        /** Same, horizontally. Models are usually right about the width and wrong about the height. */
+        val inkExtendHorizontal: Float = 0.15f,
     )
 
     /** The part of the page that [find] needs pixels for. */
@@ -101,15 +112,7 @@ object BubbleFinder {
         val leaked = edgeContact(mask, w, h) > config.maxEdgeContact
 
         if (leaked || seeds.isEmpty()) {
-            val fallbackMask = BooleanArray(w * h)
-            fillRect(fallbackMask, w, paddedBox)
-            return BubbleRegion(
-                window = window,
-                mask = fallbackMask,
-                background = background,
-                textRect = shrink(paddedBox, config.textMargin).offset(window.left, window.top),
-                fromFloodFill = false,
-            )
+            return openText(windowPixels, window, boxInWindow, paddedBox, background, config)
         }
 
         val inscribed = growInside(mask, w, h, boxInWindow, config.growthCoverage)
@@ -119,6 +122,48 @@ object BubbleFinder {
             background = background,
             textRect = shrink(inscribed, config.textMargin).offset(window.left, window.top),
             fromFloodFill = true,
+        )
+    }
+
+    /**
+     * Text on a plain page, a glowing window or artwork: no outline to trace. Only the letters are erased (see
+     * [TextEraser]); if no lettering can be told apart from the background the padded box is painted flat.
+     */
+    private fun openText(
+        pixels: IntArray,
+        window: PixelRect,
+        box: PixelRect,
+        paddedBox: PixelRect,
+        background: Int,
+        config: Config,
+    ): BubbleRegion {
+        val w = window.width
+        val h = window.height
+        val textColor = TextEraser.detectTextColor(pixels, w, paddedBox, background)
+
+        if (textColor == null) {
+            val mask = BooleanArray(w * h)
+            fillRect(mask, w, paddedBox)
+            return BubbleRegion(
+                window = window,
+                mask = mask,
+                background = background,
+                textRect = shrink(paddedBox, config.textMargin).offset(window.left, window.top),
+                fromFloodFill = false,
+            )
+        }
+
+        val cleared = extendOverLetters(pixels, w, h, paddedBox, background, textColor, config)
+        val erased = TextEraser.erase(pixels, w, h, cleared, background, textColor, TextEraser.dilationFor(box))
+        return BubbleRegion(
+            window = window,
+            mask = erased.mask,
+            background = background,
+            textRect = shrink(cleared, config.textMargin).offset(window.left, window.top),
+            fromFloodFill = false,
+            fill = erased.fill,
+            textColor = textColor,
+            extent = cleared.offset(window.left, window.top),
         )
     }
 
@@ -291,6 +336,67 @@ object BubbleFinder {
         }
         val perimeter = 2 * (w + h) - 4
         return if (perimeter <= 0) 0f else touching.toFloat() / perimeter
+    }
+
+    // endregion
+
+    // region Leftover ink
+
+    /**
+     * Grows [start] one row or column at a time while the strip next to it still holds lettering (pixels close to
+     * [textColor]), up to a limit. Stops at the first clean strip, so neighbouring lines separated by a gap, and
+     * artwork farther away, are left alone. Two rounds, because growing sideways can reveal more rows.
+     */
+    internal fun extendOverLetters(
+        pixels: IntArray,
+        w: Int,
+        h: Int,
+        start: PixelRect,
+        background: Int,
+        textColor: Int,
+        config: Config,
+    ): PixelRect {
+        val maxV = (start.height * config.inkExtendVertical).toInt() + 4
+        val maxH = (start.width * config.inkExtendHorizontal).toInt() + 4
+        var rect = start
+
+        fun lettersIn(x0: Int, y0: Int, x1: Int, y1: Int): Boolean {
+            if (x0 < 0 || y0 < 0 || x1 > w || y1 > h || x0 >= x1 || y0 >= y1) return false
+            var count = 0
+            val needed = max(2, ((x1 - x0) * (y1 - y0)) / 400)
+            for (y in y0 until y1) {
+                for (x in x0 until x1) {
+                    if (TextEraser.isLetter(pixels[y * w + x], textColor, background) && ++count >= needed) {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+
+        repeat(2) {
+            var up = 0
+            while (up < maxV && lettersIn(rect.left, rect.top - 1, rect.right, rect.top)) {
+                rect = rect.copy(top = rect.top - 1)
+                up++
+            }
+            var down = 0
+            while (down < maxV && lettersIn(rect.left, rect.bottom, rect.right, rect.bottom + 1)) {
+                rect = rect.copy(bottom = rect.bottom + 1)
+                down++
+            }
+            var left = 0
+            while (left < maxH && lettersIn(rect.left - 1, rect.top, rect.left, rect.bottom)) {
+                rect = rect.copy(left = rect.left - 1)
+                left++
+            }
+            var right = 0
+            while (right < maxH && lettersIn(rect.right, rect.top, rect.right + 1, rect.bottom)) {
+                rect = rect.copy(right = rect.right + 1)
+                right++
+            }
+        }
+        return rect
     }
 
     // endregion
