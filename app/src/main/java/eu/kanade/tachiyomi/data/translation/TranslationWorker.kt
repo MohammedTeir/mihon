@@ -37,6 +37,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -278,76 +279,95 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         val rateLimitFailures = AtomicInteger(0)
         val stopEarly = AtomicBoolean(false)
 
-        coroutineScope {
-            pages.mapIndexed { index, page ->
-                async {
-                    if (index in finishedPages) return@async
-                    semaphore.withPermit {
-                        if (stopEarly.get()) return@withPermit
-                        try {
-                            val bytes = readPage(page)
-                            val upload = withContext(Dispatchers.Default) { prepareUpload(bytes, page.mimeType) }
-                            val image = if (overlay) {
-                                val allBoxes = overlayClient.detectAndTranslate(
-                                    upload.bytes,
-                                    upload.mimeType,
-                                    apiKey,
-                                    model,
-                                    language,
-                                    delayMillis,
-                                    PromptContext.build(glossary, previousTexts),
-                                )
-                                previousTexts = allBoxes.map { it.text }
-                                val boxes = allBoxes.filter { translateSfx || it.kind != BoxKind.SFX }
-                                if (boxes.isEmpty()) {
-                                    // Nothing to translate: keep the page as it is.
-                                    TranslatedImage(bytes, page.mimeType)
-                                } else {
-                                    val rendered = withContext(Dispatchers.Default) {
-                                        PageOverlayRenderer.render(bytes, boxes)
+        val pendingAtStart = pages.indices.filter { it !in finishedPages }.toSet()
+
+        suspend fun runPass(pending: Set<Int>) {
+            coroutineScope {
+                pages.mapIndexed { index, page ->
+                    async {
+                        if (index !in pending) return@async
+                        semaphore.withPermit {
+                            if (stopEarly.get()) return@withPermit
+                            try {
+                                val bytes = readPage(page)
+                                val upload = withContext(Dispatchers.Default) { prepareUpload(bytes, page.mimeType) }
+                                val image = if (overlay) {
+                                    val allBoxes = overlayClient.detectAndTranslate(
+                                        upload.bytes,
+                                        upload.mimeType,
+                                        apiKey,
+                                        model,
+                                        language,
+                                        delayMillis,
+                                        PromptContext.build(glossary, previousTexts),
+                                    )
+                                    previousTexts = allBoxes.map { it.text }
+                                    val boxes = allBoxes.filter { translateSfx || it.kind != BoxKind.SFX }
+                                    if (boxes.isEmpty()) {
+                                        // Nothing to translate: keep the page as it is.
+                                        TranslatedImage(bytes, page.mimeType)
+                                    } else {
+                                        val rendered = withContext(Dispatchers.Default) {
+                                            PageOverlayRenderer.render(bytes, boxes)
+                                        }
+                                        TranslatedImage(rendered.bytes, rendered.mimeType)
                                     }
-                                    TranslatedImage(rendered.bytes, rendered.mimeType)
+                                } else {
+                                    client.translatePage(
+                                        upload.bytes,
+                                        upload.mimeType,
+                                        apiKey,
+                                        model,
+                                        language,
+                                        PromptContext.build(glossary),
+                                    )
                                 }
-                            } else {
-                                client.translatePage(
-                                    upload.bytes,
-                                    upload.mimeType,
-                                    apiKey,
-                                    model,
-                                    language,
-                                    PromptContext.build(glossary),
-                                )
-                            }
-                            writePage(stagingDir, index, indexWidth, image)
-                            donePages.incrementAndGet()
-                            notifier.showProgress(id, chapter.name, donePages.get(), totalPages)
-                        } catch (e: TranslationException) {
-                            if (e.isFatal) {
-                                // Daily cap of the free tier reached after some pages: keep them, report "X of Y".
-                                if (overlay && e is TranslationException.QuotaExceeded && donePages.get() > 0) {
-                                    failures[index] = e
+                                writePage(stagingDir, index, indexWidth, image)
+                                donePages.incrementAndGet()
+                                notifier.showProgress(id, chapter.name, donePages.get(), totalPages)
+                            } catch (e: TranslationException) {
+                                if (e.isFatal) {
+                                    // Daily cap of the free tier reached after some pages: keep them, report "X of Y".
+                                    if (overlay && e is TranslationException.QuotaExceeded && donePages.get() > 0) {
+                                        failures[index] = e
+                                        stopEarly.set(true)
+                                        return@withPermit
+                                    }
+                                    throw e
+                                }
+                                if (e is TranslationException.NetworkError && !context.isOnline()) {
+                                    throw TranslationException.Offline(e)
+                                }
+                                logcat(LogPriority.WARN, e) { "Page ${index + 1} of ${pages.size} failed" }
+                                failures[index] = e
+                                // Repeated rate limits mean every further page would fail too. Stop and let the
+                                // user retry later instead of burning requests.
+                                if (e is TranslationException.RateLimited &&
+                                    rateLimitFailures.incrementAndGet() >= MAX_RATE_LIMIT_FAILURES
+                                ) {
                                     stopEarly.set(true)
-                                    return@withPermit
                                 }
-                                throw e
                             }
-                            if (e is TranslationException.NetworkError && !context.isOnline()) {
-                                throw TranslationException.Offline(e)
-                            }
-                            logcat(LogPriority.WARN, e) { "Page ${index + 1} of ${pages.size} failed" }
-                            failures[index] = e
-                            // Repeated rate limits mean every further page would fail too. Stop and let the
-                            // user retry later instead of burning requests.
-                            if (e is TranslationException.RateLimited &&
-                                rateLimitFailures.incrementAndGet() >= MAX_RATE_LIMIT_FAILURES
-                            ) {
-                                stopEarly.set(true)
-                            }
+                            Unit
                         }
-                        Unit
                     }
-                }
-            }.awaitAll()
+                }.awaitAll()
+            }
+        }
+
+        // Pages that failed for a reason that usually goes away (unreadable answer, no image, server or network
+        // hiccup) are retried automatically a few times before the job gives up and reports "X of Y".
+        var pending = pendingAtStart
+        var round = 0
+        while (true) {
+            runPass(pending)
+            val retryable = failures.filterValues { isAutoRetryable(it) }.keys
+            if (retryable.isEmpty() || stopEarly.get() || round >= MAX_AUTO_RETRY_ROUNDS) break
+            round++
+            retryable.forEach { failures.remove(it) }
+            pending = retryable.toSet()
+            logcat(LogPriority.INFO) { "Auto retry $round: ${pending.size} page(s)" }
+            delay(AUTO_RETRY_DELAY_MILLIS * round)
         }
 
         if (failures.isNotEmpty() || donePages.get() < pages.size) {
@@ -574,6 +594,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
         private const val MAX_PARALLEL_PAGES = 2
         private const val MAX_RATE_LIMIT_FAILURES = 3
+        private const val MAX_AUTO_RETRY_ROUNDS = 3
+        private const val AUTO_RETRY_DELAY_MILLIS = 15_000L
         private const val MAX_OFFLINE_ATTEMPTS = 5
 
         private const val MAX_UPLOAD_SIDE = 2048
@@ -584,6 +606,11 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         private const val ESTIMATED_BYTES_PER_PAGE = 3L * 1024 * 1024
         private const val ESTIMATED_OVERLAY_BYTES_PER_PAGE = 3L * 1024 * 1024 / 2
         private const val STORAGE_HEADROOM_BYTES = 32L * 1024 * 1024
+
+        private fun isAutoRetryable(e: TranslationException) = e is TranslationException.UnreadableAnswer ||
+            e is TranslationException.NoImageReturned ||
+            e is TranslationException.ServerError ||
+            e is TranslationException.NetworkError
 
         /** Process wide: translations run one chapter at a time. */
         private val queueLock = Mutex()
