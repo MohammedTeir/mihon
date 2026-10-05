@@ -1129,6 +1129,13 @@
     <string name="action_translate_chapter">Translate chapter</string>
     <string name="translation_api_key_missing">Set your Gemini API key in Settings → Advanced → Chapter translation first</string>
     <string name="translation_no_pages">No pages found in this downloaded chapter</string>
+    <string name="action_open_translated_chapter">Open translated chapter</string>
+    <string name="action_delete_translated_chapter">Delete translated chapter</string>
+    <string name="translation_delete_title">Delete translated chapter?</string>
+    <string name="translation_delete_text">The translated copy of %1$s will be removed from the Local source. The original download is not touched.</string>
+    <string name="translation_deleted">Translated chapter deleted</string>
+    <string name="translation_delete_failed">Couldn\'t delete the translated chapter</string>
+    <string name="translation_open_failed">Couldn\'t open the translated series. Check that it still exists in the Local source.</string>
     <string name="translation_confirm_title">Translate chapter?</string>
     <string name="translation_confirm_privacy">The pages will be uploaded to Google and translated into %1$s. Usage is billed to your own API key and may take a while.</string>
     <string name="translation_confirm_privacy_overlay">Free mode: on Google\'s free tier the pages may be used to improve Google\'s products. Pages are processed slowly, and the daily cap may stop the job early. Finished pages are kept.</string>
