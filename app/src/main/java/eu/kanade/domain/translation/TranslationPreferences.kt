@@ -34,5 +34,8 @@ class TranslationPreferences(
     fun translateSfx() = preferenceStore.getBoolean("pref_translation_sfx", false)
 
     // Overlay mode: minimum pause between requests, to stay under free tier rate limits.
+    // Per manga glossary text, one `source = translation` per line. See Glossary.
+    fun glossary(mangaId: Long) = preferenceStore.getString("pref_translation_glossary_$mangaId", "")
+
     fun requestDelaySeconds() = preferenceStore.getInt("pref_translation_delay_seconds", 6)
 }
