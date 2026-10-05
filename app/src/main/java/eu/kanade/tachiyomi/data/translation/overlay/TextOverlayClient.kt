@@ -62,7 +62,9 @@ class TextOverlayClient(
         if (!isValidApiKey(apiKey)) {
             throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
         }
-        val body = json.encodeToString(buildRequest(image, mimeType, language, promptContext)).toRequestBody(JSON_MEDIA_TYPE)
+        val body = json.encodeToString(
+            buildRequest(image, mimeType, language, promptContext),
+        ).toRequestBody(JSON_MEDIA_TYPE)
 
         var attempt = 0
         while (true) {
