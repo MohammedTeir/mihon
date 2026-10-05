@@ -1132,6 +1132,9 @@
     <string name="translation_confirm_title">Translate chapter?</string>
     <string name="translation_confirm_privacy">The pages will be uploaded to Google and translated into %1$s. Usage is billed to your own API key and may take a while.</string>
     <string name="translation_confirm_privacy_overlay">Free mode: on Google\'s free tier the pages may be used to improve Google\'s products. Pages are processed slowly, and the daily cap may stop the job early. Finished pages are kept.</string>
+    <string name="translation_glossary_edit">Edit glossary for this manga</string>
+    <string name="translation_glossary_title">Glossary</string>
+    <string name="translation_glossary_help">One term per line as: original = translation. Names and terms listed here are translated the same way on every page. Lines starting with # are ignored.</string>
     <string name="translation_confirm_action">Translate</string>
     <string name="translation_started">Translation started. You\'ll be notified when it finishes.</string>
 
