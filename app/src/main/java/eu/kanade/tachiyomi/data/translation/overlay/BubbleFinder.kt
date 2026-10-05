@@ -70,6 +70,8 @@ object BubbleFinder {
          * outlines, panel borders) and are never erased. The caller sets it from the page size.
          */
         val maxLetterSide: Int = Int.MAX_VALUE,
+        /** A traced area whose mid-tone share is above this is gradient or artwork, not a flat bubble. */
+        val maxMidToneShare: Float = 0.15f,
     )
 
     /** The part of the page that [find] needs pixels for. */
@@ -116,7 +118,8 @@ object BubbleFinder {
         // the border for a large part of its length has escaped into the page background.
         val leaked = edgeContact(mask, w, h) > config.maxEdgeContact
 
-        if (leaked || seeds.isEmpty()) {
+        val notFlat = TextEraser.midToneShare(windowPixels, mask, background) > config.maxMidToneShare
+        if (leaked || seeds.isEmpty() || notFlat) {
             return openText(windowPixels, window, boxInWindow, paddedBox, background, config)
         }
 
@@ -169,6 +172,11 @@ object BubbleFinder {
             textColor,
             TextEraser.dilationFor(box),
             config.maxLetterSide,
+            paddedBox.expandedWithin(
+                (paddedBox.width * 0.03f).toInt() + 2,
+                (paddedBox.height * 0.15f).toInt() + 2,
+                PixelRect(0, 0, w, h),
+            ),
         )
         return BubbleRegion(
             window = window,
