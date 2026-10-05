@@ -158,6 +158,75 @@ class BubbleFinderTest {
     }
 
     @Test
+    fun `open text is erased even when the box cuts through the letters`() {
+        val page = Page(300, 200, white)
+        page.text(PixelRect(40, 80, 260, 110), black) // the real text line
+        val box = PixelRect(40, 90, 260, 100) // the model's box only covers the middle of it
+
+        val region = find(page, box)
+
+        assertFalse(region.fromFloodFill)
+        assertTrue(region.contains(150, 81))
+        assertTrue(region.contains(150, 108))
+        val fill = region.fill!!
+        // Letter pixels are replaced with the page colour
+        val index = (100 - region.window.top) * region.window.width + (150 - region.window.left)
+        assertEquals(white, fill[index])
+    }
+
+    @Test
+    fun `ink growth stops at a clean gap`() {
+        val page = Page(300, 200, white)
+        page.text(PixelRect(40, 80, 260, 110), black)
+        page.text(PixelRect(40, 140, 260, 170), black) // another line, 30 px lower
+        val box = PixelRect(40, 90, 260, 100)
+
+        val region = find(page, box)
+
+        assertFalse(region.contains(150, 150))
+    }
+
+    @Test
+    fun `only the letters are replaced, not the whole box`() {
+        val page = Page(300, 200, white)
+        page.text(PixelRect(100, 90, 200, 110), black)
+        val box = PixelRect(60, 70, 240, 130) // much bigger than the text
+
+        val region = find(page, box)
+
+        // A spot inside the box but far from any letter is untouched
+        val far = (75 - region.window.top) * region.window.width + (70 - region.window.left)
+        assertFalse(region.mask[far])
+        // A letter pixel is replaced
+        val letter = (100 - region.window.top) * region.window.width + (150 - region.window.left)
+        assertTrue(region.mask[letter])
+    }
+
+    @Test
+    fun `light text on a gradient is removed without painting a flat block`() {
+        val page = Page(300, 200, 0xFF000000.toInt())
+        for (y in 0 until 200) {
+            val blue = 100 + y / 2 // vertical gradient
+            for (x in 0 until 300) page.pixels[y * 300 + x] = (0xFF shl 24) or (40 shl 16) or (120 shl 8) or blue
+        }
+        page.text(PixelRect(60, 90, 240, 110), white)
+        val box = PixelRect(60, 88, 240, 112)
+
+        val region = find(page, box)
+
+        val fill = region.fill!!
+        val w = region.window.width
+        for (y in listOf(95, 100, 105)) {
+            val index = (y - region.window.top) * w + (150 - region.window.left)
+            if (!region.mask[index]) continue
+            val expectedBlue = 100 + y / 2
+            val blue = fill[index] and 0xFF
+            assertTrue(abs(blue - expectedBlue) <= 6, "row $y: $blue vs $expectedBlue")
+        }
+        assertEquals(white, region.textColor)
+    }
+
+    @Test
     fun `boxes in the same bubble are grouped and boxes in other bubbles are not`() {
         val page = Page(400, 200, 0xFF808080.toInt())
         page.ellipse(100, 100, 70, 60, white, black)
