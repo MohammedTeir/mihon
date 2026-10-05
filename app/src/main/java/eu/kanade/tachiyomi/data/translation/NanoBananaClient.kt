@@ -50,12 +50,13 @@ class NanoBananaClient(
         apiKey: String,
         model: String,
         language: String,
+        promptContext: String = "",
     ): TranslatedImage {
         if (!isValidApiKey(apiKey)) {
             throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
         }
 
-        val requestBody = json.encodeToString(buildRequest(image, mimeType, language))
+        val requestBody = json.encodeToString(buildRequest(image, mimeType, language, promptContext))
             .toRequestBody(JSON_MEDIA_TYPE)
 
         var attempt = 0
@@ -114,13 +115,21 @@ class NanoBananaClient(
                 "text, matching the original lettering style and fitting it inside the bubbles. Do not add, " +
                 "remove, crop or redraw any other part of the image. Return the full page as an image."
 
-        fun buildPrompt(language: String) = PROMPT_TEMPLATE.replace("{language}", language)
+        fun buildPrompt(language: String, extra: String = ""): String {
+            val prompt = PROMPT_TEMPLATE.replace("{language}", language)
+            return if (extra.isBlank()) prompt else "$prompt\n\n$extra"
+        }
 
-        fun buildRequest(image: ByteArray, mimeType: String, language: String) = GenerateContentRequest(
+        fun buildRequest(
+            image: ByteArray,
+            mimeType: String,
+            language: String,
+            extra: String = "",
+        ) = GenerateContentRequest(
             contents = listOf(
                 RequestContent(
                     parts = listOf(
-                        RequestPart(text = buildPrompt(language)),
+                        RequestPart(text = buildPrompt(language, extra)),
                         RequestPart(
                             inlineData = RequestInlineData(
                                 mimeType = mimeType,
