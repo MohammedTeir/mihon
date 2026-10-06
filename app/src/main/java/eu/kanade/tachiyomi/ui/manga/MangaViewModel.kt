@@ -882,21 +882,34 @@ class MangaViewModel(
     }
 
     /**
-     * Makes sure the translated series exists as a Local source entry in the library database and returns its id,
-     * so the screen can open it. Its chapter list is read from the folder when the screen opens.
+     * Finds the translated copy of [chapter] as a chapter of the Local source, ready for the reader. The translated
+     * series is added to the database and its chapter list is read from the folder first if that has not happened
+     * yet, so the reader can open the chapter without going through the library.
      */
-    suspend fun getTranslatedSeriesId(): Long? {
+    suspend fun getTranslatedChapter(chapter: Chapter): Chapter? {
         val manga = successState?.manga ?: return null
-        val name = translatedSeriesName(manga)
+        val seriesName = translatedSeriesName(manga)
+        val folderName = translatedChapterFolder(chapter)
         return withIOContext {
             try {
-                val exists = localSourceFileSystem.getBaseDirectory()?.findFile(name)?.isDirectory == true
+                val exists = localSourceFileSystem.getBaseDirectory()
+                    ?.findFile(seriesName)
+                    ?.findFile(folderName)
+                    ?.isDirectory == true
                 if (!exists) return@withIOContext null
-                networkToLocalManga(
-                    Manga.create().copy(source = LocalSource.ID, url = name, title = name),
-                ).id
+
+                val localManga = networkToLocalManga(
+                    Manga.create().copy(source = LocalSource.ID, url = seriesName, title = seriesName),
+                )
+                updateMangaFromRemote(manga = localManga, fetchDetails = true, fetchChapters = true).getOrThrow()
+
+                val expectedUrl = "$seriesName/$folderName"
+                val chapters = getMangaAndChapters.awaitChapters(localManga.id)
+                chapters.firstOrNull { it.url == expectedUrl } ?: chapters.firstOrNull { it.name == folderName }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Could not open translated series" }
+                logcat(LogPriority.ERROR, e) { "Could not open translated chapter" }
                 null
             }
         }
@@ -1451,10 +1464,10 @@ class MangaViewModel(
     }
 }
 
-@Immutable
 /** How many following chapters the Translate dialog offers to queue together with the chosen one. */
 private const val MAX_EXTRA_CHAPTERS = 9
 
+@Immutable
 sealed class ChapterList {
     @Immutable
     data class MissingCount(
