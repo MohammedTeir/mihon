@@ -43,5 +43,8 @@ class TranslationPreferences(
         TranslationOptions.DEFAULT_SOURCE_LANGUAGE,
     )
 
+    // Queue only starts while charging and on an unmetered network (for big batches left running overnight).
+    fun onlyWhenIdle() = preferenceStore.getBoolean("pref_translation_only_idle", false)
+
     fun requestDelaySeconds() = preferenceStore.getInt("pref_translation_delay_seconds", 6)
 }
