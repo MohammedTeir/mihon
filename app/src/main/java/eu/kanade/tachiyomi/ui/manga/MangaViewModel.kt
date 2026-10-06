@@ -759,7 +759,17 @@ class MangaViewModel(
     fun translateChapter(item: ChapterList.Item) {
         val state = successState ?: return
 
-        if (translationPreferences.apiKey().get().isBlank()) {
+        val offline = translationPreferences.mode().get() == TranslationOptions.MODE_OFFLINE
+        if (offline) {
+            if (TranslationOptions.offlineTag(translationPreferences.targetLanguage().get()) == null) {
+                viewModelScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = context.stringResource(MR.strings.translation_error_language_unsupported),
+                    )
+                }
+                return
+            }
+        } else if (translationPreferences.apiKey().get().isBlank()) {
             viewModelScope.launch {
                 snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_api_key_missing))
             }
@@ -777,7 +787,8 @@ class MangaViewModel(
     }
 
     fun confirmTranslateChapter(chapter: Chapter) {
-        TranslationWorker.start(context, chapter.id)
+        val offline = translationPreferences.mode().get() == TranslationOptions.MODE_OFFLINE
+        TranslationWorker.start(context, chapter.id, requiresNetwork = !offline)
         viewModelScope.launch {
             snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_started))
         }
