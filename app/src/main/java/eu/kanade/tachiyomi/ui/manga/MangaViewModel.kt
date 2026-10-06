@@ -65,6 +65,7 @@ import logcat.LogPriority
 import mihon.core.archive.archiveReader
 import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
+import tachiyomi.core.common.i18n.pluralStringResource
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
@@ -782,15 +783,59 @@ class MangaViewModel(
                 snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_no_pages))
                 return@launchIO
             }
-            updateSuccessState { it.copy(dialog = Dialog.TranslateChapter(item.chapter, pageCount)) }
+            val next = nextDownloadedChapters(item.chapter, state)
+                .map { it to countDownloadedPages(it, state.manga, state.source) }
+                .filter { (_, pages) -> pages > 0 }
+            updateSuccessState {
+                it.copy(
+                    dialog = Dialog.TranslateChapter(
+                        chapter = item.chapter,
+                        pageCount = pageCount,
+                        next = next.map { (chapter, _) -> chapter },
+                        nextPageCounts = next.map { (_, pages) -> pages },
+                    ),
+                )
+            }
         }
     }
 
-    fun confirmTranslateChapter(chapter: Chapter) {
+    /** Downloaded chapters after [current] (by chapter number) that have no translated copy yet. */
+    private fun nextDownloadedChapters(current: Chapter, state: State.Success): List<Chapter> {
+        if (current.chapterNumber < 0) return emptyList()
+        return state.chapters
+            .filter {
+                it.isDownloaded &&
+                    it.chapter.id !in state.translatedChapterIds &&
+                    it.chapter.chapterNumber > current.chapterNumber
+            }
+            .map { it.chapter }
+            .sortedBy { it.chapterNumber }
+            .distinctBy { it.chapterNumber }
+            .take(MAX_EXTRA_CHAPTERS)
+    }
+
+    /** Queues one job per chapter. They run one at a time, in this order. */
+    fun confirmTranslateChapters(chapters: List<Chapter>, onlyWhenIdle: Boolean) {
+        translationPreferences.onlyWhenIdle().set(onlyWhenIdle)
         val offline = translationPreferences.mode().get() == TranslationOptions.MODE_OFFLINE
-        TranslationWorker.start(context, chapter.id, requiresNetwork = !offline)
+        chapters.forEach {
+            TranslationWorker.start(context, it.id, requiresNetwork = !offline, onlyWhenIdle = onlyWhenIdle)
+        }
         viewModelScope.launch {
-            snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_started))
+            val message = when {
+                onlyWhenIdle -> context.pluralStringResource(
+                    MR.plurals.translation_queued_idle,
+                    chapters.size,
+                    chapters.size,
+                )
+                chapters.size > 1 -> context.pluralStringResource(
+                    MR.plurals.translation_queued,
+                    chapters.size,
+                    chapters.size,
+                )
+                else -> context.stringResource(MR.strings.translation_started)
+            }
+            snackbarHostState.showSnackbar(message = message)
         }
     }
 
@@ -1281,7 +1326,12 @@ class MangaViewModel(
         data object SettingsSheet : Dialog
         data object TrackSheet : Dialog
         data object FullCover : Dialog
-        data class TranslateChapter(val chapter: Chapter, val pageCount: Int) : Dialog
+        data class TranslateChapter(
+            val chapter: Chapter,
+            val pageCount: Int,
+            val next: List<Chapter> = emptyList(),
+            val nextPageCounts: List<Int> = emptyList(),
+        ) : Dialog
         data class DeleteTranslatedChapter(val chapter: Chapter) : Dialog
     }
 
@@ -1402,6 +1452,9 @@ class MangaViewModel(
 }
 
 @Immutable
+/** How many following chapters the Translate dialog offers to queue together with the chosen one. */
+private const val MAX_EXTRA_CHAPTERS = 9
+
 sealed class ChapterList {
     @Immutable
     data class MissingCount(
