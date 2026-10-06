@@ -122,11 +122,11 @@ class MangaScreen(
             onChapterClicked = { openChapter(context, it) },
             onDownloadChapter = viewModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
             onTranslateChapter = viewModel::translateChapter,
-            onOpenTranslatedChapter = {
+            onOpenTranslatedChapter = { item ->
                 scope.launch {
-                    val id = viewModel.getTranslatedSeriesId()
-                    if (id != null) {
-                        navigator.push(MangaScreen(id))
+                    val translated = viewModel.getTranslatedChapter(item.chapter)
+                    if (translated != null) {
+                        openChapter(context, translated)
                     } else {
                         viewModel.snackbarHostState.showSnackbar(
                             context.stringResource(MR.strings.translation_open_failed),
@@ -307,7 +307,7 @@ class MangaScreen(
                     onlyWhenIdleDefault = remember { translationPreferences.onlyWhenIdle().get() },
                     onConfirm = { extra, onlyWhenIdle ->
                         viewModel.confirmTranslateChapters(
-                            listOf(dialog.chapter) + dialog.nextChapters.take(extra),
+                            listOf(dialog.chapter) + dialog.next.take(extra),
                             onlyWhenIdle,
                         )
                     },
