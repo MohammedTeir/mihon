@@ -145,6 +145,7 @@ fun TranslateChapterDialog(
     pageCount: Int,
     targetLanguage: String,
     overlayMode: Boolean,
+    offlineMode: Boolean,
     glossaryText: String,
     onGlossarySave: (String) -> Unit,
     onDismissRequest: () -> Unit,
@@ -187,12 +188,16 @@ fun TranslateChapterDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small)) {
                 Text(text = pluralStringResource(MR.plurals.translation_confirm_pages, count = pageCount, pageCount))
-                Text(text = stringResource(MR.strings.translation_confirm_privacy, targetLanguage))
-                if (overlayMode) {
-                    Text(text = stringResource(MR.strings.translation_confirm_privacy_overlay))
-                }
-                TextButton(onClick = { editingGlossary = true }) {
-                    Text(text = stringResource(MR.strings.translation_glossary_edit))
+                if (offlineMode) {
+                    Text(text = stringResource(MR.strings.translation_confirm_offline))
+                } else {
+                    Text(text = stringResource(MR.strings.translation_confirm_privacy, targetLanguage))
+                    if (overlayMode) {
+                        Text(text = stringResource(MR.strings.translation_confirm_privacy_overlay))
+                    }
+                    TextButton(onClick = { editingGlossary = true }) {
+                        Text(text = stringResource(MR.strings.translation_glossary_edit))
+                    }
                 }
             }
         },
