@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.data.translation.overlay
 
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -28,5 +30,27 @@ data class TextBox(
 
     companion object {
         const val GRID = 1000f
+
+        /**
+         * Builds a box from pixel coordinates. The grid has no more precision than 1/1000 of the page, so the
+         * box is rounded outwards: converting it back always covers the original pixels.
+         */
+        fun fromPixels(
+            left: Int,
+            top: Int,
+            right: Int,
+            bottom: Int,
+            imageWidth: Int,
+            imageHeight: Int,
+            kind: BoxKind,
+            text: String,
+        ): TextBox {
+            val grid = GRID.toInt()
+            val xMin = floor(left.toDouble() / imageWidth * grid).toInt().coerceIn(0, grid - 1)
+            val yMin = floor(top.toDouble() / imageHeight * grid).toInt().coerceIn(0, grid - 1)
+            val xMax = ceil(right.toDouble() / imageWidth * grid).toInt().coerceIn(xMin + 1, grid)
+            val yMax = ceil(bottom.toDouble() / imageHeight * grid).toInt().coerceIn(yMin + 1, grid)
+            return TextBox(yMin, xMin, yMax, xMax, kind, text)
+        }
     }
 }
