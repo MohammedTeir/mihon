@@ -25,9 +25,67 @@ object TranslationOptions {
 
     const val MODE_REDRAW = "redraw"
     const val MODE_OVERLAY = "overlay"
+    const val MODE_OFFLINE = "offline"
 
     /** Mode id -> string resource is resolved in the settings screen. */
-    val MODES: List<String> = listOf(MODE_REDRAW, MODE_OVERLAY)
+    val MODES: List<String> = listOf(MODE_REDRAW, MODE_OVERLAY, MODE_OFFLINE)
+
+    /** Offline mode: language of the pages (BCP 47 tag -> display name). One text recognizer per script. */
+    const val DEFAULT_SOURCE_LANGUAGE = "en"
+
+    val SOURCE_LANGUAGES: Map<String, String> = linkedMapOf(
+        "en" to "English",
+        "ko" to "Korean",
+        "ja" to "Japanese",
+        "zh" to "Chinese",
+    )
+
+    /** Offline mode has no model for these targets. */
+    private val OFFLINE_UNSUPPORTED = setOf("Chinese (Traditional)", "Serbian")
+
+    private val LANGUAGE_TAGS: Map<String, String> = mapOf(
+        "English" to "en",
+        "Arabic" to "ar",
+        "Spanish" to "es",
+        "French" to "fr",
+        "German" to "de",
+        "Portuguese" to "pt",
+        "Italian" to "it",
+        "Russian" to "ru",
+        "Japanese" to "ja",
+        "Korean" to "ko",
+        "Chinese (Simplified)" to "zh",
+        "Indonesian" to "id",
+        "Vietnamese" to "vi",
+        "Thai" to "th",
+        "Turkish" to "tr",
+        "Polish" to "pl",
+        "Dutch" to "nl",
+        "Ukrainian" to "uk",
+        "Czech" to "cs",
+        "Romanian" to "ro",
+        "Hungarian" to "hu",
+        "Greek" to "el",
+        "Swedish" to "sv",
+        "Norwegian" to "no",
+        "Danish" to "da",
+        "Finnish" to "fi",
+        "Hebrew" to "he",
+        "Persian" to "fa",
+        "Hindi" to "hi",
+        "Bengali" to "bn",
+        "Urdu" to "ur",
+        "Tamil" to "ta",
+        "Malay" to "ms",
+        "Filipino" to "tl",
+        "Bulgarian" to "bg",
+        "Croatian" to "hr",
+        "Catalan" to "ca",
+    )
+
+    /** BCP 47 tag for the offline translator, or null when the language is not available offline. */
+    fun offlineTag(language: String): String? =
+        if (language in OFFLINE_UNSUPPORTED) null else LANGUAGE_TAGS[language]
 
     /**
      * Text models for overlay mode. Which of them are free depends on Google's current free tier, so the list
