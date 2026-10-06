@@ -1145,6 +1145,12 @@
     <string name="translation_glossary_edit">Edit glossary for this manga</string>
     <string name="translation_glossary_title">Glossary</string>
     <string name="translation_glossary_help">One term per line as: original = translation. Names and terms listed here are translated the same way on every page. Lines starting with # are ignored.</string>
+    <string name="translation_estimate_overlay">About %1$d requests to the text model (one per page, more if pages are retried). Google sets the free limits; the job stops early if the daily limit is reached.</string>
+    <string name="translation_estimate_redraw">%1$d images will be generated. Google bills each one to your API key. Check the current price of the model in Google AI Studio.</string>
+    <string name="translation_next_title">Also translate the next downloaded chapters</string>
+    <string name="translation_next_none">This chapter only</string>
+    <string name="translation_next_count">+%1$d more</string>
+    <string name="translation_only_idle">Only while charging and on Wi-Fi</string>
     <string name="translation_confirm_action">Translate</string>
     <string name="translation_started">Translation started. You\'ll be notified when it finishes.</string>
 
