@@ -37,5 +37,11 @@ class TranslationPreferences(
     // Per manga glossary text, one `source = translation` per line. See Glossary.
     fun glossary(mangaId: Long) = preferenceStore.getString("pref_translation_glossary_$mangaId", "")
 
+    // Offline mode: language of the pages, as a BCP 47 tag (see TranslationOptions.SOURCE_LANGUAGES).
+    fun sourceLanguage() = preferenceStore.getString(
+        "pref_translation_source_lang",
+        TranslationOptions.DEFAULT_SOURCE_LANGUAGE,
+    )
+
     fun requestDelaySeconds() = preferenceStore.getInt("pref_translation_delay_seconds", 6)
 }
