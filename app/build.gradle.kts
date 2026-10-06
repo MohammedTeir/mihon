@@ -256,6 +256,13 @@ dependencies {
     // Job scheduling
     implementation(libs.androidx.work)
 
+    // Offline chapter translation (on-device text recognition and translation)
+    implementation(libs.mlkit.ocr.latin)
+    implementation(libs.mlkit.ocr.chinese)
+    implementation(libs.mlkit.ocr.japanese)
+    implementation(libs.mlkit.ocr.korean)
+    implementation(libs.mlkit.translate)
+
     // RxJava
     implementation(libs.rxJava)
 
