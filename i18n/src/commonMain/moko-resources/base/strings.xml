@@ -1118,6 +1118,9 @@
     <string name="pref_translation_mode">Translation mode</string>
     <string name="pref_translation_mode_redraw">Redraw page (image model, paid)</string>
     <string name="pref_translation_mode_overlay">Overlay text (free text model)</string>
+    <string name="pref_translation_mode_offline">Offline (on this phone, free)</string>
+    <string name="pref_translation_source_language">Language of the pages</string>
+    <string name="pref_translation_offline_info">Runs entirely on your phone: no API key, no daily limit, and your pages are never uploaded. The language packs (about 30 MB each) are downloaded once, then it works without internet. The translations are much simpler than Gemini\'s: slang and short exclamations often come out literal, and the glossary isn\'t used. Text on artwork may be missed. Pick the language the pages are written in.</string>
     <string name="pref_translation_text_model">Text model</string>
     <string name="pref_translation_sfx">Translate sound effects</string>
     <string name="pref_translation_sfx_summary">Usually looks worse than the original lettering, so it\'s off by default</string>
@@ -1166,6 +1169,9 @@
     <string name="translation_error_quota">Your Gemini quota or billing limit has been reached. Check your plan and billing in Google AI Studio, then try again later.</string>
     <string name="translation_error_model">The selected model isn\'t available for your API key. Choose another model in Settings → Advanced → Chapter translation.</string>
     <string name="translation_error_request">Google rejected the request: %1$s</string>
+    <string name="translation_confirm_offline">Translation runs on your phone and the pages are not uploaded. The first time, the language packs are downloaded.</string>
+    <string name="translation_error_model_download">Couldn\'t download the language packs. Check your connection and try again.</string>
+    <string name="translation_error_language_unsupported">Offline translation isn\'t available for this language. Pick another target language, or use another mode.</string>
     <string name="translation_error_offline">No internet connection. Translation will resume automatically when you\'re back online.</string>
     <string name="translation_error_storage_low">Not enough free storage: %1$s needed, %2$s available.</string>
     <string name="translation_error_storage_write">Couldn\'t write to the Local source folder. Check Mihon\'s storage location and free space.</string>
