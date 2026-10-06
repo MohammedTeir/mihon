@@ -358,15 +358,18 @@ object SettingsAdvancedScreen : SearchableSettings {
         val modePref = remember { translationPreferences.mode() }
         val textModelPref = remember { translationPreferences.textModel() }
         val sfxPref = remember { translationPreferences.translateSfx() }
+        val sourceLanguagePref = remember { translationPreferences.sourceLanguage() }
         val delayPref = remember { translationPreferences.requestDelaySeconds() }
 
         val apiKey by apiKeyPref.collectAsState()
         val mode by modePref.collectAsState()
         val overlay = mode == TranslationOptions.MODE_OVERLAY
+        val offline = mode == TranslationOptions.MODE_OFFLINE
 
         val modeEntries = mapOf(
             TranslationOptions.MODE_REDRAW to stringResource(MR.strings.pref_translation_mode_redraw),
             TranslationOptions.MODE_OVERLAY to stringResource(MR.strings.pref_translation_mode_overlay),
+            TranslationOptions.MODE_OFFLINE to stringResource(MR.strings.pref_translation_mode_offline),
         )
         val delayEntries = TranslationOptions.REQUEST_DELAYS.associateWith {
             if (it == 0) {
@@ -386,18 +389,20 @@ object SettingsAdvancedScreen : SearchableSettings {
                         subtitle = stringResource(MR.strings.pref_translation_enable_summary),
                     ),
                 )
-                add(
-                    Preference.PreferenceItem.EditTextPreference(
-                        preference = apiKeyPref,
-                        title = stringResource(MR.strings.pref_translation_api_key),
-                        // Fixed subtitle without "%s" so the stored key is never shown in the list.
-                        subtitle = if (apiKey.isBlank()) {
-                            stringResource(MR.strings.pref_translation_api_key_not_set)
-                        } else {
-                            stringResource(MR.strings.pref_translation_api_key_set)
-                        },
-                    ),
-                )
+                if (!offline) {
+                    add(
+                        Preference.PreferenceItem.EditTextPreference(
+                            preference = apiKeyPref,
+                            title = stringResource(MR.strings.pref_translation_api_key),
+                            // Fixed subtitle without "%s" so the stored key is never shown in the list.
+                            subtitle = if (apiKey.isBlank()) {
+                                stringResource(MR.strings.pref_translation_api_key_not_set)
+                            } else {
+                                stringResource(MR.strings.pref_translation_api_key_set)
+                            },
+                        ),
+                    )
+                }
                 add(
                     Preference.PreferenceItem.ListPreference(
                         preference = modePref,
@@ -405,7 +410,15 @@ object SettingsAdvancedScreen : SearchableSettings {
                         title = stringResource(MR.strings.pref_translation_mode),
                     ),
                 )
-                if (overlay) {
+                if (offline) {
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = sourceLanguagePref,
+                            entries = TranslationOptions.SOURCE_LANGUAGES,
+                            title = stringResource(MR.strings.pref_translation_source_language),
+                        ),
+                    )
+                } else if (overlay) {
                     add(
                         Preference.PreferenceItem.ListPreference(
                             preference = textModelPref,
@@ -447,6 +460,12 @@ object SettingsAdvancedScreen : SearchableSettings {
                     add(
                         Preference.PreferenceItem.InfoPreference(
                             stringResource(MR.strings.pref_translation_free_privacy),
+                        ),
+                    )
+                } else if (offline) {
+                    add(
+                        Preference.PreferenceItem.InfoPreference(
+                            stringResource(MR.strings.pref_translation_offline_info),
                         ),
                     )
                 }
