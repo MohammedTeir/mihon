@@ -23,6 +23,7 @@ import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.translation.context.Glossary
 import eu.kanade.tachiyomi.data.translation.context.PromptContext
+import eu.kanade.tachiyomi.data.translation.offline.OfflineSession
 import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
 import eu.kanade.tachiyomi.data.translation.overlay.PageOverlayRenderer
 import eu.kanade.tachiyomi.data.translation.overlay.TextOverlayClient
@@ -125,7 +126,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         chapterName = chapter.name
 
         val apiKey = translationPreferences.apiKey().get().trim()
-        if (apiKey.isEmpty()) {
+        val offlineMode = translationPreferences.mode().get() == TranslationOptions.MODE_OFFLINE
+        // Offline mode runs on the phone and needs no key.
+        if (apiKey.isEmpty() && !offlineMode) {
             notifier.showError(chapter.id, chapter.name, TranslationException.InvalidApiKey(null), 0, 0)
             return Result.failure()
         }
@@ -190,7 +193,10 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
     private suspend fun translate(chapter: Chapter, manga: Manga, source: Source, apiKey: String): Outcome {
         val language = translationPreferences.targetLanguage().get()
-        val overlay = translationPreferences.mode().get() == TranslationOptions.MODE_OVERLAY
+        val mode = translationPreferences.mode().get()
+        val offline = mode == TranslationOptions.MODE_OFFLINE
+        // Offline mode shares the overlay pipeline: text boxes found and translated, then drawn by the app.
+        val overlay = mode == TranslationOptions.MODE_OVERLAY || offline
         val model = if (overlay) translationPreferences.textModel().get() else translationPreferences.model().get()
 
         val chapterDir = downloadProvider.findChapterDir(
@@ -202,11 +208,21 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         ) ?: throw TranslationException.EmptyChapter("downloaded chapter not found")
 
         val reader = if (chapterDir.isFile) openArchive(chapterDir) else null
+        var session: OfflineSession? = null
         try {
+            session = if (offline) {
+                OfflineSession.create(
+                    translationPreferences.sourceLanguage().get(),
+                    TranslationOptions.offlineTag(language),
+                )
+            } else {
+                null
+            }
             val pages = listPages(chapterDir, reader)
-            return translatePages(chapter, manga, pages, apiKey, model, language, overlay)
+            return translatePages(chapter, manga, pages, apiKey, model, language, overlay, session)
         } finally {
             reader?.close()
+            session?.close()
         }
     }
 
@@ -218,6 +234,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         model: String,
         language: String,
         overlay: Boolean,
+        offlineSession: OfflineSession?,
     ): Outcome {
         val baseDir = localSourceFileSystem.getBaseDirectory() ?: throw TranslationException.LocalSourceUnavailable()
 
@@ -262,6 +279,13 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
         notifier.showProgress(id, chapter.name, donePages.get(), totalPages)
 
+        try {
+            offlineSession?.prepare()
+        } catch (e: TranslationException.ModelDownloadFailed) {
+            // Without a connection the language packs cannot be fetched. Wait for one instead of failing.
+            throw if (context.isOnline()) e else TranslationException.Offline(e)
+        }
+
         val indexWidth = max(MIN_INDEX_WIDTH, pages.size.toString().length)
         // Overlay mode is paced by the free tier limits, so pages go one at a time.
         val semaphore = Semaphore(if (overlay) 1 else MAX_PARALLEL_PAGES)
@@ -286,8 +310,23 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                             if (stopEarly.get()) return@withPermit
                             try {
                                 val bytes = readPage(page)
-                                val upload = withContext(Dispatchers.Default) { prepareUpload(bytes, page.mimeType) }
-                                val image = if (overlay) {
+                                // Offline mode reads the page in strips by itself, so nothing is prepared for upload.
+                                val upload = if (offlineSession != null) {
+                                    Upload(bytes, page.mimeType)
+                                } else {
+                                    withContext(Dispatchers.Default) { prepareUpload(bytes, page.mimeType) }
+                                }
+                                val image = if (offlineSession != null) {
+                                    val boxes = offlineSession.detectAndTranslate(bytes)
+                                    if (boxes.isEmpty()) {
+                                        TranslatedImage(bytes, page.mimeType)
+                                    } else {
+                                        val rendered = withContext(Dispatchers.Default) {
+                                            PageOverlayRenderer.render(bytes, boxes)
+                                        }
+                                        TranslatedImage(rendered.bytes, rendered.mimeType)
+                                    }
+                                } else if (overlay) {
                                     val allBoxes = overlayClient.detectAndTranslate(
                                         upload.bytes,
                                         upload.mimeType,
@@ -614,15 +653,18 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
         /**
          * Queues the translation of a downloaded chapter. Does nothing if the same chapter is already queued or
-         * running. Requires a network connection; WorkManager waits for one.
+         * running. Waits for a network connection unless [requiresNetwork] is false (offline mode, whose language
+         * packs are downloaded once and which reports a missing connection itself).
          */
-        fun start(context: Context, chapterId: Long) {
+        fun start(context: Context, chapterId: Long, requiresNetwork: Boolean = true) {
             val request = OneTimeWorkRequestBuilder<TranslationWorker>()
                 .addTag(TAG)
                 .setInputData(workDataOf(KEY_CHAPTER_ID to chapterId))
                 .setConstraints(
                     Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .setRequiredNetworkType(
+                            if (requiresNetwork) NetworkType.CONNECTED else NetworkType.NOT_REQUIRED,
+                        )
                         .build(),
                 )
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
