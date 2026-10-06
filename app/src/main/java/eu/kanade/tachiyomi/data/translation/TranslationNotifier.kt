@@ -163,6 +163,12 @@ class TranslationNotifier(
             error.detail ?: "HTTP ${error.httpCode}",
         )
         is TranslationException.Offline -> context.stringResource(MR.strings.translation_error_offline)
+        is TranslationException.ModelDownloadFailed -> context.stringResource(
+            MR.strings.translation_error_model_download,
+        )
+        is TranslationException.UnsupportedLanguage -> context.stringResource(
+            MR.strings.translation_error_language_unsupported,
+        )
         is TranslationException.NotEnoughStorage -> context.stringResource(
             MR.strings.translation_error_storage_low,
             Formatter.formatShortFileSize(context, error.requiredBytes),
