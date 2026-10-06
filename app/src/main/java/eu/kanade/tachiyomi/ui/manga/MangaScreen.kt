@@ -293,6 +293,7 @@ class MangaScreen(
             is MangaViewModel.Dialog.TranslateChapter -> {
                 TranslateChapterDialog(
                     pageCount = dialog.pageCount,
+                    nextPageCounts = dialog.nextPageCounts,
                     targetLanguage = remember { translationPreferences.targetLanguage().get() },
                     glossaryText = remember { translationPreferences.glossary(dialog.chapter.mangaId).get() },
                     onGlossarySave = { translationPreferences.glossary(dialog.chapter.mangaId).set(it.trim()) },
@@ -303,7 +304,13 @@ class MangaScreen(
                         translationPreferences.mode().get() == TranslationOptions.MODE_OFFLINE
                     },
                     onDismissRequest = onDismissRequest,
-                    onConfirm = { viewModel.confirmTranslateChapter(dialog.chapter) },
+                    onlyWhenIdleDefault = remember { translationPreferences.onlyWhenIdle().get() },
+                    onConfirm = { extra, onlyWhenIdle ->
+                        viewModel.confirmTranslateChapters(
+                            listOf(dialog.chapter) + dialog.nextChapters.take(extra),
+                            onlyWhenIdle,
+                        )
+                    },
                 )
             }
             is MangaViewModel.Dialog.SetFetchInterval -> {
