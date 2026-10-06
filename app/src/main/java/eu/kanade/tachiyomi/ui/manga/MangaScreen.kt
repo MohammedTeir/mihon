@@ -299,6 +299,9 @@ class MangaScreen(
                     overlayMode = remember {
                         translationPreferences.mode().get() == TranslationOptions.MODE_OVERLAY
                     },
+                    offlineMode = remember {
+                        translationPreferences.mode().get() == TranslationOptions.MODE_OFFLINE
+                    },
                     onDismissRequest = onDismissRequest,
                     onConfirm = { viewModel.confirmTranslateChapter(dialog.chapter) },
                 )
