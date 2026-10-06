@@ -654,17 +654,27 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         /**
          * Queues the translation of a downloaded chapter. Does nothing if the same chapter is already queued or
          * running. Waits for a network connection unless [requiresNetwork] is false (offline mode, whose language
-         * packs are downloaded once and which reports a missing connection itself).
+         * packs are downloaded once and which reports a missing connection itself). With [onlyWhenIdle] it also
+         * waits for a charger and an unmetered network, which suits long queues left running overnight.
          */
-        fun start(context: Context, chapterId: Long, requiresNetwork: Boolean = true) {
+        fun start(
+            context: Context,
+            chapterId: Long,
+            requiresNetwork: Boolean = true,
+            onlyWhenIdle: Boolean = false,
+        ) {
+            val networkType = when {
+                !requiresNetwork -> NetworkType.NOT_REQUIRED
+                onlyWhenIdle -> NetworkType.UNMETERED
+                else -> NetworkType.CONNECTED
+            }
             val request = OneTimeWorkRequestBuilder<TranslationWorker>()
                 .addTag(TAG)
                 .setInputData(workDataOf(KEY_CHAPTER_ID to chapterId))
                 .setConstraints(
                     Constraints.Builder()
-                        .setRequiredNetworkType(
-                            if (requiresNetwork) NetworkType.CONNECTED else NetworkType.NOT_REQUIRED,
-                        )
+                        .setRequiredNetworkType(networkType)
+                        .setRequiresCharging(onlyWhenIdle)
                         .build(),
                 )
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
