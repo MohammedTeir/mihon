@@ -23,6 +23,8 @@ import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
 import eu.kanade.tachiyomi.data.translation.overlay.TextBox
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import java.io.IOException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -102,8 +104,13 @@ class OfflineSession private constructor(
             }
 
             val boxes = mutableListOf<TextBox>()
+            var failedBlocks = 0
             for (item in found.sortedWith(compareBy({ it.top }, { it.left }))) {
-                val translated = translate(item.text)
+                val translated = translateOrNull(item.text)
+                if (translated == null) {
+                    failedBlocks++
+                    continue
+                }
                 if (translated.isBlank()) continue
                 boxes += TextBox.fromPixels(
                     left = item.left.coerceIn(0, width - 1),
@@ -116,20 +123,24 @@ class OfflineSession private constructor(
                     text = translated,
                 )
             }
+            // One block the translator cannot handle should not cost the whole page. Only a page where every
+            // block failed is reported as failed.
+            if (boxes.isEmpty() && failedBlocks > 0) throw TranslationException.CorruptPage("translation failed")
             return boxes
         } finally {
             decoder.recycle()
         }
     }
 
-    private suspend fun translate(text: String): String {
+    private suspend fun translateOrNull(text: String): String? {
         translations[text]?.let { return it }
         val result = try {
             translator.translate(text).awaitResult()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            throw TranslationException.CorruptPage("translation failed", e)
+            logcat(LogPriority.WARN, e) { "Could not translate one text block" }
+            return null
         }
         translations[text] = result
         return result
