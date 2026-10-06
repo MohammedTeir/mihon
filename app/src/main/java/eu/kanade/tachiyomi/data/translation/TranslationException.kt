@@ -58,6 +58,17 @@ sealed class TranslationException(message: String, cause: Throwable? = null) : E
         override val isFatal get() = true
     }
 
+    /** The language packs of the offline mode could not be downloaded. */
+    class ModelDownloadFailed(cause: Throwable) : TranslationException("Language pack download failed", cause) {
+        override val isFatal get() = true
+    }
+
+    /** The offline translator has no model for the chosen language. */
+    class UnsupportedLanguage(language: String?) :
+        TranslationException("Offline translation does not support: ${language.orEmpty()}") {
+        override val isFatal get() = true
+    }
+
     // endregion
 
     // region Page level errors (the job continues with the other pages)
