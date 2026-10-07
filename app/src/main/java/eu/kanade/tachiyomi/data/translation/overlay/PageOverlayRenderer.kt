@@ -89,20 +89,24 @@ object PageOverlayRenderer {
         val pixelBoxes = boxes.map { it.toPixelRect(bitmap.width, bitmap.height) }
 
         // First pass: trace every bubble on the untouched page, so one erased bubble cannot confuse the next.
-        val regions = pixelBoxes.map { regionFor(bitmap, it, imageRect) }
+        val regions = pixelBoxes.mapIndexed { index, box ->
+            regionFor(bitmap, box, imageRect, traceBubble = boxes[index].kind == BoxKind.BUBBLE)
+        }
         val groups = BubbleGrouping.group(pixelBoxes, regions)
 
         // Merge groups into single items (union box, joined text) and trace them again if they changed.
         class Item(val region: BubbleRegion, val text: String)
 
-        val items = groups.map { group ->
-            if (group.size == 1) {
+        val items = groups.mapNotNull { group ->
+            val kind = boxes[group.first()].kind
+            val item = if (group.size == 1) {
                 Item(regions[group.first()], boxes[group.first()].text)
             } else {
                 val union = group.map { pixelBoxes[it] }.reduce(PixelRect::union)
                 val text = group.joinToString(" ") { boxes[it].text.trim() }
-                Item(regionFor(bitmap, union, imageRect), text)
+                Item(regionFor(bitmap, union, imageRect, traceBubble = kind == BoxKind.BUBBLE), text)
             }
+            if (BubbleGrouping.canRenderSafely(kind, item.region)) item else null
         }
 
         val canvas = Canvas(bitmap)
@@ -145,12 +149,12 @@ object PageOverlayRenderer {
         }
     }
 
-    private fun regionFor(bitmap: Bitmap, box: PixelRect, image: PixelRect): BubbleRegion {
+    private fun regionFor(bitmap: Bitmap, box: PixelRect, image: PixelRect, traceBubble: Boolean): BubbleRegion {
         val window = BubbleFinder.windowFor(box, image)
         val pixels = IntArray(window.width * window.height)
         bitmap.getPixels(pixels, 0, window.width, window.left, window.top, window.width, window.height)
         val config = BubbleFinder.Config(maxLetterSide = (bitmap.width * MAX_LETTER_SIDE_RATIO).toInt())
-        return BubbleFinder.find(pixels, window, box, config)
+        return BubbleFinder.find(pixels, window, box, config, traceBubble)
     }
 
     /** Fills the mask with the bubble colour, one horizontal run at a time. */

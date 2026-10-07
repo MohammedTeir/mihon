@@ -122,8 +122,10 @@ class TextOverlayClient(
                 "Rules:\n" +
                 "- Return one entry per bubble or text box, not one per line. Put all the original text of a " +
                 "bubble into one box.\n" +
-                "- \"box_2d\" is [ymin, xmin, ymax, xmax] on a 0-1000 grid, tightly around all the original text " +
-                "of that bubble.\n" +
+                "- \"box_2d\" is [ymin, xmin, ymax, xmax] on a 0-1000 grid. Make it tight around the visible " +
+                "letter strokes only, with very little padding. Do NOT box the whole bubble, panel, sign, or empty " +
+                "space. Never include a face, hair, body, or artwork in a text box. Check that each box actually " +
+                "covers the source lettering and nothing else before replying.\n" +
                 "- \"kind\" is \"bubble\" for speech or thought bubbles, \"caption\" for narration boxes, " +
                 "game or system windows, signs, labels and any other readable text. Use \"sfx\" ONLY for large " +
                 "stylised onomatopoeia drawn as part of the artwork (impact or sound effects), never for sentences.\n" +

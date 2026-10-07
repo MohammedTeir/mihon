@@ -24,6 +24,9 @@ object BubbleGrouping {
 
         for (i in boxes.indices) {
             for (j in i + 1 until boxes.size) {
+                // A rectangular open-text extent is only an erasure safety limit, not evidence that two boxes
+                // belong to the same bubble. Group only boxes independently traced inside a closed bubble.
+                if (!regions[i].fromFloodFill || !regions[j].fromFloodFill) continue
                 val iHoldsJ = regions[i].contains(boxes[j].centerX, boxes[j].centerY)
                 val jHoldsI = regions[j].contains(boxes[i].centerX, boxes[i].centerY)
                 if (iHoldsJ || jHoldsI) parent[find(j)] = find(i)
@@ -31,4 +34,8 @@ object BubbleGrouping {
         }
         return boxes.indices.groupBy { find(it) }.values.sortedBy { it.first() }
     }
+
+    /** Speech bubbles that cannot be confidently traced must not be erased or lettered over nearby artwork. */
+    fun canRenderSafely(kind: BoxKind, region: BubbleRegion): Boolean =
+        kind != BoxKind.BUBBLE || region.fromFloodFill
 }

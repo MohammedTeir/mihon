@@ -247,16 +247,6 @@ class NanoBananaResponseParserTest {
     }
 
     @Test
-    fun `redraw prompt protects faces and limits edits to original text`() {
-        val prompt = NanoBananaClient.buildPrompt("Arabic")
-
-        assertTrue(prompt.contains("Faces are strictly protected"))
-        assertTrue(prompt.contains("keep every non-text part of the image unchanged"))
-        assertTrue(prompt.contains("only where that exact original text appears"))
-        assertTrue(prompt.contains("leave that region untouched"))
-    }
-
-    @Test
     fun `request contains prompt and inline image and requests image output`() {
         val request = NanoBananaClient.buildRequest(imageBytes, "image/jpeg", "French")
         val encoded = json.encodeToString(request)

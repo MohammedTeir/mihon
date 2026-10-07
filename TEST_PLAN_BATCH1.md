@@ -33,10 +33,10 @@
 | 17 | Stacked captions | Several bubbles close together in caption mode | Caption boxes do not cover each other (they move down or up) |
 | 18 | Changing the setting later | Change the font, tap Translate on an already translated chapter | Nothing happens/"already translated": delete the translated copy (bin icon) first, then translate again |
 
-## Redraw mode: preserve artwork
+## Overlay mode: protect faces and artwork
 
 | # | Scenario | Steps | Expected |
 |---|----------|-------|----------|
-| 19 | Face preservation | Redraw the same sample chapter that contains a face near dialogue (especially pages 004-006 and 011) | Faces, eyes, hair, expressions, clothing, and linework remain sharp and visually unchanged; no translation is drawn over a face |
-| 20 | Text placement and cleanup | Inspect pages with multiple bubbles or text over artwork (especially pages 003-005 and 009) | Each translation stays with its source text; no text spills onto artwork or another bubble; no gray paint blocks or fragments of the original text remain |
-| 21 | Uncertain text | Redraw a page with tiny or stylized text | If the model cannot safely identify a text region, it leaves that region/artwork unchanged rather than painting over a face or illustration |
+| 19 | Face preservation | Overlay-translate the same sample chapter with dialogue near faces (especially pages 004-006 and 011) | Faces, eyes, hair, expressions, clothing, and linework remain unchanged; an uncertain bubble is left untranslated rather than painted over a face |
+| 20 | Caption/sign preservation | Overlay-translate pages with narration/signs over artwork (especially page 003) | Only the detected glyphs are erased; no flat gray/white rectangle covers the sign, hand, or other artwork |
+| 21 | Text placement and cleanup | Inspect pages with multiple bubbles or small text (especially pages 004-005 and 009) | Each translation stays with its source text; boxes from separate/open regions are not merged; source text is either fully replaced or left intact, never partially erased |

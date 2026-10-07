@@ -50,9 +50,14 @@ class BubbleFinderTest {
         private fun sq(v: Double) = v * v
     }
 
-    private fun find(page: Page, box: PixelRect, config: BubbleFinder.Config = BubbleFinder.Config()): BubbleRegion {
+    private fun find(
+        page: Page,
+        box: PixelRect,
+        config: BubbleFinder.Config = BubbleFinder.Config(),
+        traceBubble: Boolean = true,
+    ): BubbleRegion {
         val window = BubbleFinder.windowFor(box, page.bounds)
-        return BubbleFinder.find(page.window(window), window, box, config)
+        return BubbleFinder.find(page.window(window), window, box, config, traceBubble)
     }
 
     @Test
@@ -172,6 +177,37 @@ class BubbleFinderTest {
         // Letter pixels are replaced with the page colour
         val index = (100 - region.window.top) * region.window.width + (150 - region.window.left)
         assertEquals(white, fill[index])
+    }
+
+    @Test
+    fun `caption boxes erase glyphs without repainting the sign or nearby art`() {
+        val gray = 0xFF777777.toInt()
+        val page = Page(200, 180, gray)
+        for (y in 50 until 110) for (x in 40 until 160) page.pixels[y * page.width + x] = white
+        val box = PixelRect(70, 70, 130, 90)
+        page.text(PixelRect(76, 75, 124, 85), black)
+
+        val region = find(page, box, traceBubble = false)
+        val signPixel = (60 - region.window.top) * region.window.width + (60 - region.window.left)
+        val blankSignPixel = (60 - region.window.top) * region.window.width + (140 - region.window.left)
+        val letterPixel = (80 - region.window.top) * region.window.width + (80 - region.window.left)
+
+        assertFalse(region.fromFloodFill)
+        assertFalse(region.mask[signPixel], "the surrounding artwork must not be repainted")
+        assertFalse(region.mask[blankSignPixel], "the empty sign background must be preserved")
+        assertTrue(region.mask[letterPixel], "the original glyph should be erased")
+    }
+
+    @Test
+    fun `untraced speech bubbles are not safe to render in place`() {
+        val page = Page(200, 160, white)
+        val box = PixelRect(60, 70, 140, 100)
+        page.text(PixelRect(70, 78, 130, 92), black)
+        val region = find(page, box)
+
+        assertFalse(region.fromFloodFill)
+        assertFalse(BubbleGrouping.canRenderSafely(BoxKind.BUBBLE, region))
+        assertTrue(BubbleGrouping.canRenderSafely(BoxKind.CAPTION, region))
     }
 
     @Test
@@ -298,6 +334,19 @@ class BubbleFinderTest {
         val groups = BubbleGrouping.group(boxes, regions)
 
         assertEquals(listOf(listOf(0, 1), listOf(2)), groups)
+    }
+
+    @Test
+    fun `overlapping open text extents are not treated as one bubble`() {
+        val page = Page(260, 180, white)
+        val boxes = listOf(PixelRect(60, 70, 160, 100), PixelRect(100, 70, 200, 100))
+        boxes.forEach { page.text(it, black) }
+
+        val regions = boxes.map { find(page, it) }
+        val groups = BubbleGrouping.group(boxes, regions)
+
+        assertTrue(regions.all { !it.fromFloodFill })
+        assertEquals(listOf(listOf(0), listOf(1)), groups)
     }
 
     @Test

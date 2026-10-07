@@ -83,12 +83,14 @@ object BubbleFinder {
     /**
      * @param windowPixels ARGB pixels of [window], row by row (stride = window.width).
      * @param box the text box in page coordinates, already clipped to the page.
+     * @param traceBubble whether a filled bubble may be flood-filled and repainted. False keeps erasure glyph-only.
      */
     fun find(
         windowPixels: IntArray,
         window: PixelRect,
         box: PixelRect,
         config: Config = Config(),
+        traceBubble: Boolean = true,
     ): BubbleRegion {
         val w = window.width
         val h = window.height
@@ -107,6 +109,9 @@ object BubbleFinder {
         val paddedBox = boxInWindow.expandedWithin(padX, padY, windowBounds)
 
         val background = sampleBackground(windowPixels, w, h, boxInWindow)
+        if (!traceBubble) {
+            return openText(windowPixels, window, boxInWindow, paddedBox, background, config)
+        }
 
         val mask = BooleanArray(w * h)
         val seeds = collectSeeds(windowPixels, w, boxInWindow, background, config.colorTolerance)

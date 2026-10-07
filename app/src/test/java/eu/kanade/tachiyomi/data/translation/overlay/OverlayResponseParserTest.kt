@@ -20,6 +20,15 @@ class OverlayResponseParserTest {
     }
 
     @Test
+    fun `overlay prompt requests tight glyph bounds away from faces and artwork`() {
+        val prompt = TextOverlayClient.buildPrompt("Arabic")
+
+        assertTrue(prompt.contains("letter strokes only"))
+        assertTrue(prompt.contains("Do NOT box the whole bubble, panel, sign, or empty space"))
+        assertTrue(prompt.contains("Never include a face, hair, body, or artwork"))
+    }
+
+    @Test
     fun `valid object is parsed`() {
         val boxes = OverlayResponseParser.parse(
             answer("""{"boxes":[{"box_2d":[100,200,300,400],"kind":"bubble","text":"Hello"}]}"""),

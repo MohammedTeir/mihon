@@ -110,17 +110,10 @@ class NanoBananaClient(
 
         /** Prompt sent with every page. Tweak here. `{language}` is replaced with the target language name. */
         const val PROMPT_TEMPLATE =
-            "Translate all text in this manga page into {language}. This is a lettering-only edit, not an image " +
-                "redraw. Preserve the original page, composition, colours, linework, and every character exactly. " +
-                "Faces are strictly protected: do not blur, smooth, retouch, reconstruct, cover, or place text over " +
-                "any face, eyes, eyebrows, nose, mouth, skin, or hair. Do not alter characters, expressions, clothing, " +
-                "backgrounds, or panel borders. Change only the original glyphs that are clearly readable as text; " +
-                "keep every non-text part of the image unchanged. For each text item, put the complete translation " +
-                "only where that exact original text appears, inside its own bubble or caption. Remove all of that " +
-                "source text cleanly before lettering the translation so no original-language fragments remain. " +
-                "Never move a translation into artwork or another bubble. If a text region cannot be identified " +
-                "confidently, leave that region untouched rather than risk changing artwork. Keep the same page " +
-                "dimensions and crop. Return the full page as an image."
+            "Translate all text in this manga page into {language}. Keep the artwork, panel layout, " +
+                "speech bubble shapes and style exactly the same. Replace the original text with the translated " +
+                "text, matching the original lettering style and fitting it inside the bubbles. Do not add, " +
+                "remove, crop or redraw any other part of the image. Return the full page as an image."
 
         fun buildPrompt(language: String, extra: String = ""): String {
             val prompt = PROMPT_TEMPLATE.replace("{language}", language)
