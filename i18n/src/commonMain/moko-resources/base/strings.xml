@@ -1119,6 +1119,17 @@
     <string name="pref_translation_mode_redraw">Redraw page (image model, paid)</string>
     <string name="pref_translation_mode_overlay">Overlay text (free text model)</string>
     <string name="pref_translation_text_model">Text model</string>
+    <string name="pref_translation_font">Font</string>
+    <string name="translation_font_bold">Bold</string>
+    <string name="translation_font_regular">Regular</string>
+    <string name="translation_font_serif">Serif</string>
+    <string name="translation_font_comic">Comic (handwriting style)</string>
+    <string name="pref_translation_text_size">Text size</string>
+    <string name="translation_text_size_value">%1$d%% of the largest size that fits</string>
+    <string name="pref_translation_placement">Where the translation goes</string>
+    <string name="translation_placement_replace">Replace the original text</string>
+    <string name="translation_placement_below">In a caption box next to the original text (original stays)</string>
+    <string name="pref_translation_style_info">Font, size and placement are applied when a chapter is translated. To change an already translated chapter, delete it with the bin icon and translate it again.</string>
     <string name="pref_translation_sfx">Translate sound effects</string>
     <string name="pref_translation_sfx_summary">Usually looks worse than the original lettering, so it\'s off by default</string>
     <string name="pref_translation_delay">Pause between pages</string>
@@ -1142,6 +1153,12 @@
     <string name="translation_glossary_edit">Edit glossary for this manga</string>
     <string name="translation_glossary_title">Glossary</string>
     <string name="translation_glossary_help">One term per line as: original = translation. Names and terms listed here are translated the same way on every page. Lines starting with # are ignored.</string>
+    <string name="translation_estimate_overlay">About %1$d requests to the text model (one per page, more if pages are retried). Google sets the free limits; the job stops early if the daily limit is reached.</string>
+    <string name="translation_estimate_redraw">%1$d images will be generated. Google bills each one to your API key. Check the current price of the model in Google AI Studio.</string>
+    <string name="translation_next_title">Also translate the next downloaded chapters</string>
+    <string name="translation_next_none">This chapter only</string>
+    <string name="translation_next_count">+%1$d more</string>
+    <string name="translation_only_idle">Only while charging and on Wi-Fi</string>
     <string name="translation_confirm_action">Translate</string>
     <string name="translation_started">Translation started. You\'ll be notified when it finishes.</string>
 
