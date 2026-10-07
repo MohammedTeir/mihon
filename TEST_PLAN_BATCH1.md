@@ -32,3 +32,11 @@
 | 16 | Caption mode | Placement "caption box": translate a page with a hard layout | The original page is untouched; each translation sits in a rounded white box right below its original text (above it near the page bottom), readable, not outside the page |
 | 17 | Stacked captions | Several bubbles close together in caption mode | Caption boxes do not cover each other (they move down or up) |
 | 18 | Changing the setting later | Change the font, tap Translate on an already translated chapter | Nothing happens/"already translated": delete the translated copy (bin icon) first, then translate again |
+
+## Redraw mode: preserve artwork
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| 19 | Face preservation | Redraw the same sample chapter that contains a face near dialogue (especially pages 004-006 and 011) | Faces, eyes, hair, expressions, clothing, and linework remain sharp and visually unchanged; no translation is drawn over a face |
+| 20 | Text placement and cleanup | Inspect pages with multiple bubbles or text over artwork (especially pages 003-005 and 009) | Each translation stays with its source text; no text spills onto artwork or another bubble; no gray paint blocks or fragments of the original text remain |
+| 21 | Uncertain text | Redraw a page with tiny or stylized text | If the model cannot safely identify a text region, it leaves that region/artwork unchanged rather than painting over a face or illustration |
