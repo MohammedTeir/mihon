@@ -275,6 +275,10 @@ class MangaViewModel(
                 )
             }
 
+            // The database/work-info observers can emit before the initial Success state exists. Their early
+            // translated-chapter scan then returns immediately, so scan again now that the manga is available.
+            refreshTranslatedChapters()
+
             // Start observe tracking since it only needs mangaId
             observeTrackers()
 
