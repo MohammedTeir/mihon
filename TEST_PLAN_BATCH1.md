@@ -1,0 +1,34 @@
+# Test plan: batch 1 (direct open, queue and cost, reading modes)
+
+## Open translated chapter directly
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| 1 | Open | Translate a chapter, wait for "Translation finished", tap the Open icon | The translated chapter opens directly in the reader (no stop at the library or series screen). The first time may take a moment while the translated series is registered |
+| 2 | Open twice | Back out, tap Open again | Opens at once, no duplicate series or chapters in the Local source |
+| 3 | Missing copy | Delete the translated folder outside the app, tap Open before the list refreshes | "Couldn't open" message, no crash |
+
+## Queue and cost
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| 4 | Estimate line | Tap Translate in Overlay mode, then in Redraw mode | Overlay shows "About N requests..."; Redraw shows "N images will be generated... billed to your API key". No prices are shown |
+| 5 | Next chapters offered | Download chapters 1-6, tap Translate on chapter 2 | Chips "This chapter only", "+1 more", "+3 more"... up to the number of later downloaded chapters (max 9). Earlier chapters and chapters already translated are not offered |
+| 6 | Page total | Select "+3 more" | The "N pages will be sent" line becomes the total of the four chapters |
+| 7 | Queue order | Confirm with "+3 more" | Snackbar "Translation queued (4 chapters)". One chapter translates at a time, in chapter order, each finishing with its own notification |
+| 8 | Charger and Wi-Fi | Turn on "Only while charging and on Wi-Fi" with the phone unplugged and on mobile data, confirm | Snackbar says it starts when charging and on Wi-Fi. Nothing runs until both are true, then the queue starts. The switch stays on the next time the dialog opens |
+| 9 | Cancel one | Cancel the notification of the running chapter | Only that chapter stops; the next queued chapter starts |
+| 10 | No later chapters | Tap Translate on the newest downloaded chapter | No chip row, only the switch |
+| 11 | Chapters without numbers | A series whose chapters have no number | No chip row (nothing is guessed), single-chapter translate works as before |
+
+## Reading modes (Overlay mode only)
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| 12 | Settings | Overlay mode: open Chapter translation settings | Font, Text size (60-100%) and "Where the translation goes" are listed, plus a note that they apply when a chapter is translated. In Redraw mode they are hidden |
+| 13 | Defaults | Translate with the defaults | Same look as before this change (bold sans, largest size that fits, text replaces the original) |
+| 14 | Fonts | Translate the same chapter with Bold, Regular, Serif and Comic (delete the translated copy between runs) | Each looks different. Check Arabic/other non-Latin text still renders (Comic may fall back to the system font for them) |
+| 15 | Size | Text size 60% | Translated text is visibly smaller inside the same bubbles, never larger than at 100% |
+| 16 | Caption mode | Placement "caption box": translate a page with a hard layout | The original page is untouched; each translation sits in a rounded white box right below its original text (above it near the page bottom), readable, not outside the page |
+| 17 | Stacked captions | Several bubbles close together in caption mode | Caption boxes do not cover each other (they move down or up) |
+| 18 | Changing the setting later | Change the font, tap Translate on an already translated chapter | Nothing happens/"already translated": delete the translated copy (bin icon) first, then translate again |

@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.data.translation.context.Glossary
 import eu.kanade.tachiyomi.data.translation.context.PromptContext
 import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
 import eu.kanade.tachiyomi.data.translation.overlay.PageOverlayRenderer
+import eu.kanade.tachiyomi.data.translation.overlay.RenderStyle
 import eu.kanade.tachiyomi.data.translation.overlay.TextOverlayClient
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
@@ -266,6 +267,11 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         // Overlay mode is paced by the free tier limits, so pages go one at a time.
         val semaphore = Semaphore(if (overlay) 1 else MAX_PARALLEL_PAGES)
         val translateSfx = translationPreferences.translateSfx().get()
+        val style = RenderStyle.from(
+            translationPreferences.fontStyle().get(),
+            translationPreferences.textSizePercent().get(),
+            translationPreferences.placement().get(),
+        )
         val delayMillis = translationPreferences.requestDelaySeconds().get().coerceIn(0, 120) * 1000L
         val glossary = Glossary.parse(translationPreferences.glossary(manga.id).get())
         // Overlay mode runs one page at a time, so the text of the page before is known when the next one starts.
@@ -304,7 +310,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         TranslatedImage(bytes, page.mimeType)
                                     } else {
                                         val rendered = withContext(Dispatchers.Default) {
-                                            PageOverlayRenderer.render(bytes, boxes)
+                                            PageOverlayRenderer.render(bytes, boxes, style)
                                         }
                                         TranslatedImage(rendered.bytes, rendered.mimeType)
                                     }
@@ -614,15 +620,17 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
         /**
          * Queues the translation of a downloaded chapter. Does nothing if the same chapter is already queued or
-         * running. Requires a network connection; WorkManager waits for one.
+         * running. Requires a network connection; WorkManager waits for one. With [onlyWhenIdle] it also waits for a
+         * charger and an unmetered network, which suits long queues left running overnight.
          */
-        fun start(context: Context, chapterId: Long) {
+        fun start(context: Context, chapterId: Long, onlyWhenIdle: Boolean = false) {
             val request = OneTimeWorkRequestBuilder<TranslationWorker>()
                 .addTag(TAG)
                 .setInputData(workDataOf(KEY_CHAPTER_ID to chapterId))
                 .setConstraints(
                     Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .setRequiredNetworkType(if (onlyWhenIdle) NetworkType.UNMETERED else NetworkType.CONNECTED)
+                        .setRequiresCharging(onlyWhenIdle)
                         .build(),
                 )
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)

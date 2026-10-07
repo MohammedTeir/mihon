@@ -3,12 +3,16 @@ package eu.kanade.presentation.manga.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,6 +36,7 @@ import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import kotlin.math.absoluteValue
+import kotlin.math.min
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -143,15 +148,24 @@ fun DeleteTranslatedChapterDialog(
 @Composable
 fun TranslateChapterDialog(
     pageCount: Int,
+    nextPageCounts: List<Int>,
     targetLanguage: String,
     overlayMode: Boolean,
+    onlyWhenIdleDefault: Boolean,
     glossaryText: String,
     onGlossarySave: (String) -> Unit,
     onDismissRequest: () -> Unit,
-    onConfirm: () -> Unit,
+    onConfirm: (extraChapters: Int, onlyWhenIdle: Boolean) -> Unit,
 ) {
     var glossary by remember { mutableStateOf(glossaryText) }
     var editingGlossary by remember { mutableStateOf(false) }
+    var extraChapters by rememberSaveable { mutableIntStateOf(0) }
+    var onlyWhenIdle by rememberSaveable { mutableStateOf(onlyWhenIdleDefault) }
+
+    val extraOptions = remember(nextPageCounts.size) {
+        listOf(0, 1, 3, 5, 9).map { min(it, nextPageCounts.size) }.distinct()
+    }
+    val totalPages = pageCount + nextPageCounts.take(extraChapters).sum()
 
     if (editingGlossary) {
         GlossaryDialog(
@@ -175,7 +189,7 @@ fun TranslateChapterDialog(
             TextButton(
                 onClick = {
                     onDismissRequest()
-                    onConfirm()
+                    onConfirm(extraChapters, onlyWhenIdle)
                 },
             ) {
                 Text(text = stringResource(MR.strings.translation_confirm_action))
@@ -186,13 +200,46 @@ fun TranslateChapterDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small)) {
-                Text(text = pluralStringResource(MR.plurals.translation_confirm_pages, count = pageCount, pageCount))
+                Text(text = pluralStringResource(MR.plurals.translation_confirm_pages, count = totalPages, totalPages))
                 Text(text = stringResource(MR.strings.translation_confirm_privacy, targetLanguage))
                 if (overlayMode) {
                     Text(text = stringResource(MR.strings.translation_confirm_privacy_overlay))
+                    Text(text = stringResource(MR.strings.translation_estimate_overlay, totalPages))
+                } else {
+                    Text(text = stringResource(MR.strings.translation_estimate_redraw, totalPages))
                 }
                 TextButton(onClick = { editingGlossary = true }) {
                     Text(text = stringResource(MR.strings.translation_glossary_edit))
+                }
+                if (nextPageCounts.isNotEmpty()) {
+                    Text(text = stringResource(MR.strings.translation_next_title))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small)) {
+                        extraOptions.forEach { count ->
+                            FilterChip(
+                                selected = extraChapters == count,
+                                onClick = { extraChapters = count },
+                                label = {
+                                    Text(
+                                        text = if (count == 0) {
+                                            stringResource(MR.strings.translation_next_none)
+                                        } else {
+                                            stringResource(MR.strings.translation_next_count, count)
+                                        },
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+                ) {
+                    Text(
+                        text = stringResource(MR.strings.translation_only_idle),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = onlyWhenIdle, onCheckedChange = { onlyWhenIdle = it })
                 }
             }
         },

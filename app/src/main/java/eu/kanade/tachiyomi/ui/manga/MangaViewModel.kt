@@ -65,6 +65,7 @@ import logcat.LogPriority
 import mihon.core.archive.archiveReader
 import mihon.domain.chapter.interactor.FilterChaptersForDownload
 import mihon.domain.source.interactor.UpdateMangaFromRemote
+import tachiyomi.core.common.i18n.pluralStringResource
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
@@ -772,14 +773,56 @@ class MangaViewModel(
                 snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_no_pages))
                 return@launchIO
             }
-            updateSuccessState { it.copy(dialog = Dialog.TranslateChapter(item.chapter, pageCount)) }
+            val next = nextDownloadedChapters(item.chapter, state)
+                .map { it to countDownloadedPages(it, state.manga, state.source) }
+                .filter { (_, pages) -> pages > 0 }
+            updateSuccessState {
+                it.copy(
+                    dialog = Dialog.TranslateChapter(
+                        chapter = item.chapter,
+                        pageCount = pageCount,
+                        next = next.map { (chapter, _) -> chapter },
+                        nextPageCounts = next.map { (_, pages) -> pages },
+                    ),
+                )
+            }
         }
     }
 
-    fun confirmTranslateChapter(chapter: Chapter) {
-        TranslationWorker.start(context, chapter.id)
+    /** Downloaded chapters after [current] (by chapter number) that have no translated copy yet. */
+    private fun nextDownloadedChapters(current: Chapter, state: State.Success): List<Chapter> {
+        if (current.chapterNumber < 0) return emptyList()
+        return state.chapters
+            .filter {
+                it.isDownloaded &&
+                    it.chapter.id !in state.translatedChapterIds &&
+                    it.chapter.chapterNumber > current.chapterNumber
+            }
+            .map { it.chapter }
+            .sortedBy { it.chapterNumber }
+            .distinctBy { it.chapterNumber }
+            .take(MAX_EXTRA_CHAPTERS)
+    }
+
+    /** Queues one job per chapter. They run one at a time, in this order. */
+    fun confirmTranslateChapters(chapters: List<Chapter>, onlyWhenIdle: Boolean) {
+        translationPreferences.onlyWhenIdle().set(onlyWhenIdle)
+        chapters.forEach { TranslationWorker.start(context, it.id, onlyWhenIdle) }
         viewModelScope.launch {
-            snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_started))
+            val message = when {
+                onlyWhenIdle -> context.pluralStringResource(
+                    MR.plurals.translation_queued_idle,
+                    chapters.size,
+                    chapters.size,
+                )
+                chapters.size > 1 -> context.pluralStringResource(
+                    MR.plurals.translation_queued,
+                    chapters.size,
+                    chapters.size,
+                )
+                else -> context.stringResource(MR.strings.translation_started)
+            }
+            snackbarHostState.showSnackbar(message = message)
         }
     }
 
@@ -826,21 +869,34 @@ class MangaViewModel(
     }
 
     /**
-     * Makes sure the translated series exists as a Local source entry in the library database and returns its id,
-     * so the screen can open it. Its chapter list is read from the folder when the screen opens.
+     * Finds the translated copy of [chapter] as a chapter of the Local source, ready for the reader. The translated
+     * series is added to the database and its chapter list is read from the folder first if that has not happened
+     * yet, so the reader can open the chapter without going through the library.
      */
-    suspend fun getTranslatedSeriesId(): Long? {
+    suspend fun getTranslatedChapter(chapter: Chapter): Chapter? {
         val manga = successState?.manga ?: return null
-        val name = translatedSeriesName(manga)
+        val seriesName = translatedSeriesName(manga)
+        val folderName = translatedChapterFolder(chapter)
         return withIOContext {
             try {
-                val exists = localSourceFileSystem.getBaseDirectory()?.findFile(name)?.isDirectory == true
+                val exists = localSourceFileSystem.getBaseDirectory()
+                    ?.findFile(seriesName)
+                    ?.findFile(folderName)
+                    ?.isDirectory == true
                 if (!exists) return@withIOContext null
-                networkToLocalManga(
-                    Manga.create().copy(source = LocalSource.ID, url = name, title = name),
-                ).id
+
+                val localManga = networkToLocalManga(
+                    Manga.create().copy(source = LocalSource.ID, url = seriesName, title = seriesName),
+                )
+                updateMangaFromRemote(manga = localManga, fetchDetails = true, fetchChapters = true).getOrThrow()
+
+                val expectedUrl = "$seriesName/$folderName"
+                val chapters = getMangaAndChapters.awaitChapters(localManga.id)
+                chapters.firstOrNull { it.url == expectedUrl } ?: chapters.firstOrNull { it.name == folderName }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Could not open translated series" }
+                logcat(LogPriority.ERROR, e) { "Could not open translated chapter" }
                 null
             }
         }
@@ -1270,7 +1326,12 @@ class MangaViewModel(
         data object SettingsSheet : Dialog
         data object TrackSheet : Dialog
         data object FullCover : Dialog
-        data class TranslateChapter(val chapter: Chapter, val pageCount: Int) : Dialog
+        data class TranslateChapter(
+            val chapter: Chapter,
+            val pageCount: Int,
+            val next: List<Chapter> = emptyList(),
+            val nextPageCounts: List<Int> = emptyList(),
+        ) : Dialog
         data class DeleteTranslatedChapter(val chapter: Chapter) : Dialog
     }
 
@@ -1389,6 +1450,9 @@ class MangaViewModel(
         }
     }
 }
+
+/** How many following chapters the Translate dialog offers to queue together with the chosen one. */
+private const val MAX_EXTRA_CHAPTERS = 9
 
 @Immutable
 sealed class ChapterList {

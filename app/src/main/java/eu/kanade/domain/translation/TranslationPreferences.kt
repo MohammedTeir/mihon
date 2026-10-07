@@ -37,5 +37,15 @@ class TranslationPreferences(
     // Per manga glossary text, one `source = translation` per line. See Glossary.
     fun glossary(mangaId: Long) = preferenceStore.getString("pref_translation_glossary_$mangaId", "")
 
+    // Overlay mode: how the translated text looks (see RenderStyle). Applied when a chapter is translated.
+    fun fontStyle() = preferenceStore.getString("pref_translation_font", "bold")
+
+    fun textSizePercent() = preferenceStore.getInt("pref_translation_text_size", 100)
+
+    fun placement() = preferenceStore.getString("pref_translation_placement", "replace")
+
+    // The Translate dialog's "only while charging and on Wi-Fi" switch, remembered for next time.
+    fun onlyWhenIdle() = preferenceStore.getBoolean("pref_translation_only_idle", false)
+
     fun requestDelaySeconds() = preferenceStore.getInt("pref_translation_delay_seconds", 6)
 }

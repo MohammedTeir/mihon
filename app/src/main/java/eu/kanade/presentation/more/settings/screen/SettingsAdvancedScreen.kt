@@ -359,6 +359,9 @@ object SettingsAdvancedScreen : SearchableSettings {
         val textModelPref = remember { translationPreferences.textModel() }
         val sfxPref = remember { translationPreferences.translateSfx() }
         val delayPref = remember { translationPreferences.requestDelaySeconds() }
+        val fontPref = remember { translationPreferences.fontStyle() }
+        val textSizePref = remember { translationPreferences.textSizePercent() }
+        val placementPref = remember { translationPreferences.placement() }
 
         val apiKey by apiKeyPref.collectAsState()
         val mode by modePref.collectAsState()
@@ -367,6 +370,16 @@ object SettingsAdvancedScreen : SearchableSettings {
         val modeEntries = mapOf(
             TranslationOptions.MODE_REDRAW to stringResource(MR.strings.pref_translation_mode_redraw),
             TranslationOptions.MODE_OVERLAY to stringResource(MR.strings.pref_translation_mode_overlay),
+        )
+        val fontEntries = mapOf(
+            "bold" to stringResource(MR.strings.translation_font_bold),
+            "regular" to stringResource(MR.strings.translation_font_regular),
+            "serif" to stringResource(MR.strings.translation_font_serif),
+            "comic" to stringResource(MR.strings.translation_font_comic),
+        )
+        val placementEntries = mapOf(
+            "replace" to stringResource(MR.strings.translation_placement_replace),
+            "below" to stringResource(MR.strings.translation_placement_below),
         )
         val delayEntries = TranslationOptions.REQUEST_DELAYS.associateWith {
             if (it == 0) {
@@ -427,6 +440,28 @@ object SettingsAdvancedScreen : SearchableSettings {
                             title = stringResource(MR.strings.pref_translation_delay),
                         ),
                     )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = fontPref,
+                            entries = fontEntries,
+                            title = stringResource(MR.strings.pref_translation_font),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SliderPreference(
+                            preference = textSizePref,
+                            valueRange = 60..100 step 10,
+                            title = stringResource(MR.strings.pref_translation_text_size),
+                            valueText = { stringResource(MR.strings.translation_text_size_value, it) },
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.ListPreference(
+                            preference = placementPref,
+                            entries = placementEntries,
+                            title = stringResource(MR.strings.pref_translation_placement),
+                        ),
+                    )
                 } else {
                     add(
                         Preference.PreferenceItem.ListPreference(
@@ -447,6 +482,11 @@ object SettingsAdvancedScreen : SearchableSettings {
                     add(
                         Preference.PreferenceItem.InfoPreference(
                             stringResource(MR.strings.pref_translation_free_privacy),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.InfoPreference(
+                            stringResource(MR.strings.pref_translation_style_info),
                         ),
                     )
                 }

@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.text.Layout
 import android.text.StaticLayout
@@ -32,16 +33,22 @@ object PageOverlayRenderer {
     private const val MAX_LETTER_SIDE_RATIO = 0.07f
     private const val OUTPUT_QUALITY = 93
     private const val LUMINANCE_DARK_BACKGROUND = 110
+    private const val PERCENT = 100f
+    private const val CAPTION_BACKGROUND_ALPHA = 236
+    private const val CAPTION_BORDER_ALPHA = 150
+    private const val CAPTION_CORNER_RATIO = 0.012f
+    private const val CAPTION_PADDING_RATIO = 0.04f
 
     /**
      * @param boxes translated text boxes. Must not be empty.
+     * @param style font, text size and where the translation goes.
      * @throws TranslationException.CorruptPage when the page cannot be decoded or is too large for memory.
      */
-    fun render(original: ByteArray, boxes: List<TextBox>): Result {
+    fun render(original: ByteArray, boxes: List<TextBox>, style: RenderStyle = RenderStyle.DEFAULT): Result {
         var bitmap: Bitmap? = null
         try {
             bitmap = decodeMutable(original)
-            drawTranslations(bitmap, boxes)
+            drawTranslations(bitmap, boxes, style)
             val out = ByteArrayOutputStream()
             if (!bitmap.compress(Bitmap.CompressFormat.JPEG, OUTPUT_QUALITY, out)) {
                 throw TranslationException.CorruptPage("could not encode the result")
@@ -72,7 +79,12 @@ object PageOverlayRenderer {
             ?: throw TranslationException.CorruptPage("not a decodable image")
     }
 
-    private fun drawTranslations(bitmap: Bitmap, boxes: List<TextBox>) {
+    private fun drawTranslations(bitmap: Bitmap, boxes: List<TextBox>, style: RenderStyle) {
+        if (style.placement == RenderStyle.Placement.BELOW) {
+            drawCaptions(bitmap, boxes, style)
+            return
+        }
+
         val imageRect = PixelRect(0, 0, bitmap.width, bitmap.height)
         val pixelBoxes = boxes.map { it.toPixelRect(bitmap.width, bitmap.height) }
 
@@ -94,9 +106,43 @@ object PageOverlayRenderer {
         }
 
         val canvas = Canvas(bitmap)
-        val erase = Paint().apply { style = Paint.Style.FILL }
+        val erase = Paint().apply { this.style = Paint.Style.FILL }
         for (item in items) paintMask(bitmap, canvas, erase, item.region)
-        for (item in items) drawText(canvas, item.text, item.region, bitmap.width)
+        for (item in items) drawText(canvas, item.text, item.region, bitmap.width, style)
+    }
+
+    /**
+     * Leaves the page as it is and puts every translation in a caption box next to its original text. For layouts
+     * where erasing the original would damage the artwork.
+     */
+    private fun drawCaptions(bitmap: Bitmap, boxes: List<TextBox>, style: RenderStyle) {
+        val canvas = Canvas(bitmap)
+        val page = PixelRect(0, 0, bitmap.width, bitmap.height)
+        val placed = mutableListOf<PixelRect>()
+        val background = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(CAPTION_BACKGROUND_ALPHA, 255, 255, 255)
+            this.style = Paint.Style.FILL
+        }
+        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(CAPTION_BORDER_ALPHA, 0, 0, 0)
+            this.style = Paint.Style.STROKE
+            strokeWidth = max(1f, bitmap.width * 0.002f)
+        }
+        val radius = bitmap.width * CAPTION_CORNER_RATIO
+
+        for (box in boxes.sortedBy { it.yMin }) {
+            val text = box.text.trim()
+            if (text.isEmpty()) continue
+            val area = CaptionPlacer.place(box.toPixelRect(bitmap.width, bitmap.height), page, placed)
+            placed += area
+            val rect = RectF(area.left.toFloat(), area.top.toFloat(), area.right.toFloat(), area.bottom.toFloat())
+            canvas.drawRoundRect(rect, radius, radius, background)
+            canvas.drawRoundRect(rect, radius, radius, border)
+
+            val padding = max(2, (area.width * CAPTION_PADDING_RATIO).toInt())
+            val inner = PixelRect(area.left + padding, area.top + padding, area.right - padding, area.bottom - padding)
+            drawFitted(canvas, text, inner, Color.BLACK, outlined = false, bitmap.width, style)
+        }
     }
 
     private fun regionFor(bitmap: Bitmap, box: PixelRect, image: PixelRect): BubbleRegion {
@@ -144,7 +190,7 @@ object PageOverlayRenderer {
         }
     }
 
-    private fun drawText(canvas: Canvas, text: String, region: BubbleRegion, imageWidth: Int) {
+    private fun drawText(canvas: Canvas, text: String, region: BubbleRegion, imageWidth: Int, style: RenderStyle) {
         val clean = text.trim()
         val area = region.textRect
         if (clean.isEmpty() || area.isEmpty) return
@@ -152,30 +198,48 @@ object PageOverlayRenderer {
         // Open text keeps the colour of the original lettering and gets a thin contrasting outline, so it stays
         // readable on gradients and artwork. Bubbles use black or white depending on their colour.
         val letterColor = region.textColor
+        val textColor = letterColor
+            ?: if (luminance(region.background) < LUMINANCE_DARK_BACKGROUND) Color.WHITE else Color.BLACK
+        drawFitted(canvas, clean, area, textColor, outlined = letterColor != null, imageWidth, style)
+    }
+
+    /** Draws [clean] centred in [area] at the largest size that fits, scaled by the style's size setting. */
+    private fun drawFitted(
+        canvas: Canvas,
+        clean: String,
+        area: PixelRect,
+        textColor: Int,
+        outlined: Boolean,
+        imageWidth: Int,
+        style: RenderStyle,
+    ) {
+        if (area.isEmpty) return
+        // Not read inside apply {}: there "style" would mean the paint's own style.
+        val face = typefaceFor(style.font)
         val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = letterColor
-                ?: if (luminance(region.background) < LUMINANCE_DARK_BACKGROUND) Color.WHITE else Color.BLACK
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            color = textColor
+            typeface = face
         }
 
         val minSize = max(8f, imageWidth * 0.010f)
         val maxSize = max(minSize, min(area.height * 0.9f, imageWidth * 0.05f))
-        val size = FontFit.largestFitting(minSize, maxSize) { candidate ->
+        val fitted = FontFit.largestFitting(minSize, maxSize) { candidate ->
             val layout = layoutFor(clean, paint, candidate, area.width)
             layout.height <= area.height && widestLine(layout) <= area.width
         }
+        val size = max(minSize, fitted * style.sizePercent / PERCENT)
         val layout = layoutFor(clean, paint, size, area.width)
 
         canvas.save()
         canvas.clipRect(area.left.toFloat(), area.top.toFloat(), area.right.toFloat(), area.bottom.toFloat())
         val top = area.top + (area.height - layout.height) / 2f
         canvas.translate(area.left.toFloat(), max(area.top.toFloat(), top))
-        if (letterColor != null) {
+        if (outlined) {
             val outlinePaint = TextPaint(paint).apply {
-                style = Paint.Style.STROKE
+                this.style = Paint.Style.STROKE
                 strokeWidth = max(1.5f, size * 0.12f)
                 strokeJoin = Paint.Join.ROUND
-                color = if (luminance(letterColor) < LUMINANCE_DARK_BACKGROUND) Color.WHITE else Color.BLACK
+                color = if (luminance(textColor) < LUMINANCE_DARK_BACKGROUND) Color.WHITE else Color.BLACK
             }
             layoutFor(clean, outlinePaint, size, area.width).draw(canvas)
             // layoutFor() set the size on the paint it was given, keep the fill paint in sync.
@@ -183,6 +247,14 @@ object PageOverlayRenderer {
         }
         layout.draw(canvas)
         canvas.restore()
+    }
+
+    private fun typefaceFor(font: RenderStyle.Font): Typeface = when (font) {
+        RenderStyle.Font.BOLD -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        RenderStyle.Font.REGULAR -> Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        RenderStyle.Font.SERIF -> Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+        // "casual" is Android's handwriting-style family. Scripts it lacks (such as Arabic) use the system font.
+        RenderStyle.Font.COMIC -> Typeface.create("casual", Typeface.BOLD)
     }
 
     private fun layoutFor(text: String, paint: TextPaint, size: Float, width: Int): StaticLayout {

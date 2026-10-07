@@ -122,11 +122,11 @@ class MangaScreen(
             onChapterClicked = { openChapter(context, it) },
             onDownloadChapter = viewModel::runChapterDownloadActions.takeIf { !successState.source.isLocalOrStub() },
             onTranslateChapter = viewModel::translateChapter,
-            onOpenTranslatedChapter = {
+            onOpenTranslatedChapter = { item ->
                 scope.launch {
-                    val id = viewModel.getTranslatedSeriesId()
-                    if (id != null) {
-                        navigator.push(MangaScreen(id))
+                    val translated = viewModel.getTranslatedChapter(item.chapter)
+                    if (translated != null) {
+                        openChapter(context, translated)
                     } else {
                         viewModel.snackbarHostState.showSnackbar(
                             context.stringResource(MR.strings.translation_open_failed),
@@ -293,6 +293,7 @@ class MangaScreen(
             is MangaViewModel.Dialog.TranslateChapter -> {
                 TranslateChapterDialog(
                     pageCount = dialog.pageCount,
+                    nextPageCounts = dialog.nextPageCounts,
                     targetLanguage = remember { translationPreferences.targetLanguage().get() },
                     glossaryText = remember { translationPreferences.glossary(dialog.chapter.mangaId).get() },
                     onGlossarySave = { translationPreferences.glossary(dialog.chapter.mangaId).set(it.trim()) },
@@ -300,7 +301,13 @@ class MangaScreen(
                         translationPreferences.mode().get() == TranslationOptions.MODE_OVERLAY
                     },
                     onDismissRequest = onDismissRequest,
-                    onConfirm = { viewModel.confirmTranslateChapter(dialog.chapter) },
+                    onlyWhenIdleDefault = remember { translationPreferences.onlyWhenIdle().get() },
+                    onConfirm = { extra, onlyWhenIdle ->
+                        viewModel.confirmTranslateChapters(
+                            listOf(dialog.chapter) + dialog.next.take(extra),
+                            onlyWhenIdle,
+                        )
+                    },
                 )
             }
             is MangaViewModel.Dialog.SetFetchInterval -> {
