@@ -552,7 +552,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         } catch (e: OutOfMemoryError) {
             throw TranslationException.CorruptPage("page too large to crop", e)
         }
-        try {
+        return try {
             val pageWidth = bitmap.width
             val pageHeight = bitmap.height
             TallPageCropper.plan(pageWidth, pageHeight).map { crop ->
