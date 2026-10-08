@@ -119,9 +119,8 @@ class TextOverlayClient(
         const val PROMPT_TEMPLATE =
             "You are translating a manga or comic page. Find every piece of text on the page: speech bubbles, " +
                 "thought bubbles, narration or caption boxes and sound effects. Translate each into {language}.\n" +
-                "Some inputs may be crops from tall pages, not complete pages. Inspect the full visible crop from top " +
-                "to bottom, including text near or cut off by crop edges; translate only readable visible words and " +
-                "never invent content outside the crop.\n" +
+                "Images may be crops from tall pages. Scan each crop fully, top to bottom, including text near or " +
+                "cut off by crop edges. Translate only readable words; never invent text outside the crop.\n" +
                 "Rules:\n" +
                 "- Return one entry per bubble or text box, not one per line. Put all the original text of a " +
                 "bubble into one box.\n" +
