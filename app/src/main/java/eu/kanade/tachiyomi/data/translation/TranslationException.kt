@@ -75,6 +75,9 @@ sealed class TranslationException(message: String, cause: Throwable? = null) : E
         override val maxRetries get() = 2
     }
 
+    /** The model hit its output token limit, so the returned box list may be incomplete. */
+    class OutputTruncated : TranslationException("Model response reached the output token limit")
+
     /** A page that cannot be read or decoded. */
     class CorruptPage(detail: String, cause: Throwable? = null) :
         TranslationException("Unreadable page: $detail", cause)

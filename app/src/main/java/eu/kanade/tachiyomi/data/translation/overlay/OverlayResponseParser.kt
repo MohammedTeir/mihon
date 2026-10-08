@@ -30,6 +30,7 @@ object OverlayResponseParser {
      * @return the text boxes of the page, possibly empty when the page has no text.
      * @throws TranslationException.ContentBlocked when safety filters blocked the request.
      * @throws TranslationException.UnreadableAnswer when the answer is not the expected JSON.
+     * @throws TranslationException.OutputTruncated when the model stopped at its output token limit.
      */
     fun parse(body: String, json: Json): List<TextBox> {
         val response = try {
@@ -44,6 +45,9 @@ object OverlayResponseParser {
 
         val candidate = response.candidates?.firstOrNull()
             ?: throw TranslationException.UnreadableAnswer("No candidates")
+        if (candidate.finishReason.equals("MAX_TOKENS", ignoreCase = true)) {
+            throw TranslationException.OutputTruncated()
+        }
         val answer = candidate.content?.parts.orEmpty()
             .filter { it.thought != true }
             .mapNotNull { it.text }

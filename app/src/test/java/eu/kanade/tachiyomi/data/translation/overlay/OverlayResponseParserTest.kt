@@ -26,6 +26,9 @@ class OverlayResponseParserTest {
         assertTrue(prompt.contains("letter strokes only"))
         assertTrue(prompt.contains("Do NOT box the whole bubble, panel, sign, or empty space"))
         assertTrue(prompt.contains("Never include a face, hair, body, or artwork"))
+        assertTrue(prompt.contains("crops from tall pages"))
+        assertTrue(prompt.contains("cut off by crop edges"))
+        assertTrue(prompt.contains("second top-to-bottom scan"))
     }
 
     @Test
@@ -36,6 +39,19 @@ class OverlayResponseParserTest {
         )
 
         assertEquals(listOf(TextBox(100, 200, 300, 400, BoxKind.BUBBLE, "Hello")), boxes)
+    }
+
+    @Test
+    fun `valid partial json is rejected when model hits token limit`() {
+        assertThrows(TranslationException.OutputTruncated::class.java) {
+            OverlayResponseParser.parse(
+                answer(
+                    """{"boxes":[{"box_2d":[100,200,300,400],"kind":"bubble","text":"Partial"}]}""",
+                    finishReason = "MAX_TOKENS",
+                ),
+                json,
+            )
+        }
     }
 
     @Test
