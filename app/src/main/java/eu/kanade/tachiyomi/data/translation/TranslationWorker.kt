@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.data.translation.context.PromptContext
 import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
 import eu.kanade.tachiyomi.data.translation.overlay.PageOverlayRenderer
 import eu.kanade.tachiyomi.data.translation.overlay.RenderStyle
+import eu.kanade.tachiyomi.data.translation.overlay.TallPageCropper
 import eu.kanade.tachiyomi.data.translation.overlay.TextOverlayClient
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
@@ -292,16 +293,30 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                             if (stopEarly.get()) return@withPermit
                             try {
                                 val bytes = readPage(page)
-                                val upload = withContext(Dispatchers.Default) { prepareUpload(bytes, page.mimeType) }
                                 val image = if (overlay) {
-                                    val allBoxes = overlayClient.detectAndTranslate(
-                                        upload.bytes,
-                                        upload.mimeType,
-                                        apiKey,
-                                        model,
-                                        language,
-                                        delayMillis,
-                                        PromptContext.build(glossary, previousTexts),
+                                    val uploads = withContext(Dispatchers.Default) {
+                                        prepareOverlayUploads(bytes, page.mimeType)
+                                    }
+                                    val detections = mutableListOf<TallPageCropper.Detection>()
+                                    uploads.forEach { cropUpload ->
+                                        val cropBoxes = overlayClient.detectAndTranslate(
+                                            cropUpload.bytes,
+                                            cropUpload.mimeType,
+                                            apiKey,
+                                            model,
+                                            language,
+                                            delayMillis,
+                                            PromptContext.build(glossary, previousTexts),
+                                        )
+                                        detections += cropBoxes.map {
+                                            TallPageCropper.Detection(cropUpload.crop, it)
+                                        }
+                                    }
+                                    val firstUpload = uploads.first()
+                                    val allBoxes = TallPageCropper.mapAndDeduplicate(
+                                        detections,
+                                        firstUpload.pageWidth,
+                                        firstUpload.pageHeight,
                                     )
                                     previousTexts = allBoxes.map { it.text }
                                     val boxes = allBoxes.filter { translateSfx || it.kind != BoxKind.SFX }
@@ -315,6 +330,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         TranslatedImage(rendered.bytes, rendered.mimeType)
                                     }
                                 } else {
+                                    val upload = withContext(Dispatchers.Default) {
+                                        prepareUpload(bytes, page.mimeType)
+                                    }
                                     client.translatePage(
                                         upload.bytes,
                                         upload.mimeType,
@@ -455,6 +473,14 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
     private class Upload(val bytes: ByteArray, val mimeType: String)
 
+    private class OverlayUpload(
+        val crop: TallPageCropper.Crop,
+        val pageWidth: Int,
+        val pageHeight: Int,
+        val bytes: ByteArray,
+        val mimeType: String,
+    )
+
     /**
      * Downscales pages whose longest side is over [MAX_UPLOAD_SIDE] px (or that are very large files) before upload.
      * Small pages are sent untouched.
@@ -495,6 +521,57 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
             return Upload(out.toByteArray(), "image/jpeg")
         } catch (e: OutOfMemoryError) {
             throw TranslationException.CorruptPage("page too large to process", e)
+        }
+    }
+
+    /** Prepares one request image for ordinary pages, or overlapping full-width strips for very tall pages. */
+    private fun prepareOverlayUploads(bytes: ByteArray, mimeType: String): List<OverlayUpload> {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw TranslationException.CorruptPage("not a decodable image")
+        }
+
+        val initialPlan = TallPageCropper.plan(bounds.outWidth, bounds.outHeight)
+        if (initialPlan.size == 1) {
+            val upload = prepareUpload(bytes, mimeType)
+            return listOf(
+                OverlayUpload(
+                    initialPlan.single(),
+                    bounds.outWidth,
+                    bounds.outHeight,
+                    upload.bytes,
+                    upload.mimeType,
+                ),
+            )
+        }
+
+        val bitmap = try {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: throw TranslationException.CorruptPage("not a decodable image")
+        } catch (e: OutOfMemoryError) {
+            throw TranslationException.CorruptPage("page too large to crop", e)
+        }
+        try {
+            val pageWidth = bitmap.width
+            val pageHeight = bitmap.height
+            TallPageCropper.plan(pageWidth, pageHeight).map { crop ->
+                val cropBitmap = Bitmap.createBitmap(bitmap, 0, crop.top, pageWidth, crop.height)
+                try {
+                    val output = ByteArrayOutputStream()
+                    if (!cropBitmap.compress(Bitmap.CompressFormat.JPEG, UPLOAD_JPEG_QUALITY, output)) {
+                        throw TranslationException.CorruptPage("could not encode page crop")
+                    }
+                    val upload = prepareUpload(output.toByteArray(), "image/jpeg")
+                    OverlayUpload(crop, pageWidth, pageHeight, upload.bytes, upload.mimeType)
+                } finally {
+                    if (cropBitmap !== bitmap) cropBitmap.recycle()
+                }
+            }
+        } catch (e: OutOfMemoryError) {
+            throw TranslationException.CorruptPage("page too large to crop", e)
+        } finally {
+            bitmap.recycle()
         }
     }
 
