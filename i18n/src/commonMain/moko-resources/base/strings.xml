@@ -1176,6 +1176,7 @@
     <string name="translation_reason_server">%1$d hit server errors</string>
     <string name="translation_reason_network">%1$d timed out</string>
     <string name="translation_reason_unreadable">%1$d got an unreadable answer</string>
+    <string name="translation_reason_output_truncated">Model output limit reached on %1$d page(s); partial results were skipped</string>
     <string name="translation_reason_daily_limit">daily limit reached</string>
     <string name="translation_reason_corrupt">%1$d unreadable</string>
 
