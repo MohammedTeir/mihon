@@ -44,3 +44,10 @@
 | 23 | No unnecessary crop | Overlay-translate a page below the tall-page threshold (for example, 700 × 2,332 px) | The page is sent once as before; its coordinates and rendering are unchanged |
 | 24 | Crop-boundary bubble | Use a tall page with a bubble crossing the overlap between adjacent crops | The bubble is not omitted; duplicate detections from the overlap render only once, with coordinates aligned to the original page |
 | 25 | Request estimate | Open the Overlay translation confirmation for a chapter containing tall pages | The estimate says tall pages may need extra close-up requests, so the one-request-per-page count is clearly identified as approximate |
+
+## Library refresh scope
+
+| # | Scenario | Steps | Expected |
+|---|----------|-------|----------|
+| 26 | Pull-to-refresh | Select any library category and pull down to refresh | Checks all eligible manga across all categories, not just the selected category |
+| 27 | Explicit category update | Select a category and choose "Update category" from the library menu | Checks only manga assigned to that category |
