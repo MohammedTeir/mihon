@@ -46,10 +46,12 @@
 | 25 | Request estimate | Open the Overlay translation confirmation for a chapter containing tall pages | The estimate says tall pages may need extra close-up requests, so the one-request-per-page count is clearly identified as approximate |
 | 26 | Crop-edge text coverage | Use tall pages with readable dialogue near the top and bottom of each crop | The model translates visible words at crop edges and does not invent text outside the crop |
 | 27 | Truncated response | Parse a valid-looking partial box list with `finishReason=MAX_TOKENS` | The page is reported as failed/incomplete instead of being silently accepted as fully translated |
+| 28 | Source-grounded detection | Overlay-translate the supplied 12-page surgery chapter, including its thought bubbles and system/screen labels | Each entry includes source transcription and a translation; compare original/output and verify previously missed bubbles such as page 009 are handled |
+| 29 | Outlined lettering cleanup | Translate stylised multicolour title/SFX text over artwork, especially page 003 | The old outlined lettering is removed without a flat mask, face damage, or Arabic laid on top of visible English |
 
 ## Library refresh scope
 
 | # | Scenario | Steps | Expected |
 |---|----------|-------|----------|
-| 28 | Pull-to-refresh | Select any library category and pull down to refresh | Checks all eligible manga across all categories, not just the selected category |
-| 29 | Explicit category update | Select a category and choose "Update category" from the library menu | Checks only manga assigned to that category |
+| 30 | Pull-to-refresh | Select any library category and pull down to refresh | Checks all eligible manga across all categories, not just the selected category |
+| 31 | Explicit category update | Select a category and choose "Update category" from the library menu | Checks only manga assigned to that category |

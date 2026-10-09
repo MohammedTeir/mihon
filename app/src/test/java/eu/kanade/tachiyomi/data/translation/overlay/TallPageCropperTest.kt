@@ -73,6 +73,28 @@ class TallPageCropperTest {
     }
 
     @Test
+    fun `overlap duplicates use source transcription when translations differ`() {
+        val firstCrop = TallPageCropper.Crop(0, 2400)
+        val secondCrop = TallPageCropper.Crop(1800, 4000)
+        val detections = listOf(
+            TallPageCropper.Detection(
+                firstCrop,
+                TextBox(800, 100, 900, 500, BoxKind.BUBBLE, "Translation A", "I will operate now."),
+            ),
+            TallPageCropper.Detection(
+                secondCrop,
+                TextBox(55, 100, 164, 500, BoxKind.BUBBLE, "Translation B", "I will operate now."),
+            ),
+        )
+
+        val result = TallPageCropper.mapAndDeduplicate(detections, pageWidth = 700, pageHeight = 4000)
+
+        assertEquals(1, result.size)
+        assertEquals("Translation A", result.single().text)
+        assertEquals("I will operate now.", result.single().sourceText)
+    }
+
+    @Test
     fun `identical words in different locations are not deduplicated`() {
         val crop = TallPageCropper.Crop(0, 4000)
         val detections = listOf(

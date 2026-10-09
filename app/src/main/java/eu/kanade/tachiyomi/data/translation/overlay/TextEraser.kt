@@ -79,7 +79,13 @@ object TextEraser {
         val candidates = BooleanArray(w * h)
         for (y in area.top until area.bottom) {
             for (x in area.left until area.right) {
-                if (isLetter(pixels[y * w + x], textColor, background)) candidates[y * w + x] = true
+                val pixel = pixels[y * w + x]
+                // Lettering can have a fill, stroke, and shadow in different colours. Keep the original median-
+                // colour test, but also include other strong foreground colours; connected-component size and
+                // keepArea still reject most unrelated artwork.
+                if (isLetter(pixel, textColor, background) || distance(pixel, background) >= FAR_FROM_BACKGROUND) {
+                    candidates[y * w + x] = true
+                }
             }
         }
         val letters = keepLetterSized(candidates, w, h, area, maxLetterSide, keepArea)

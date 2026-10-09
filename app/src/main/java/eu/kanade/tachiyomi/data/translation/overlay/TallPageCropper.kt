@@ -58,7 +58,7 @@ object TallPageCropper {
         for (detection in detections) {
             val mappedBox = mapToPage(detection.box, detection.crop, pageHeight)
             val duplicateIndex = kept.indexOfFirst { previous ->
-                similarText(previous.box.text, mappedBox.text) &&
+                similarText(duplicateKey(previous.box), duplicateKey(mappedBox)) &&
                     overlapCoverage(previous.box, mappedBox, pageWidth, pageHeight) >= MIN_DUPLICATE_OVERLAP
             }
             if (duplicateIndex < 0) {
@@ -69,6 +69,8 @@ object TallPageCropper {
         }
         return kept.map { it.box }
     }
+
+    private fun duplicateKey(box: TextBox): String = box.sourceText.takeIf { it.isNotBlank() } ?: box.text
 
     private fun boundaryClearance(box: TextBox): Int = min(box.yMin, 1000 - box.yMax)
 

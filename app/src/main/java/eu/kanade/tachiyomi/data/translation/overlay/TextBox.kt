@@ -16,6 +16,7 @@ data class TextBox(
     val xMax: Int,
     val kind: BoxKind,
     val text: String,
+    val sourceText: String = "",
 ) {
     /** Converts the normalized box to pixels of an image with the given size. */
     fun toPixelRect(imageWidth: Int, imageHeight: Int): PixelRect {

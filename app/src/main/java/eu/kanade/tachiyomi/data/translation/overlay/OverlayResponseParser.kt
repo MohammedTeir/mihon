@@ -21,6 +21,7 @@ object OverlayResponseParser {
     private class RawBox(
         @SerialName("box_2d") val box: List<Double>? = null,
         val kind: String? = null,
+        @SerialName("source_text") val sourceText: String? = null,
         val text: String? = null,
     )
 
@@ -108,7 +109,7 @@ object OverlayResponseParser {
         val xMax = maxOf(values[1], values[3])
         if (yMax - yMin < 1 || xMax - xMin < 1) return null
 
-        return TextBox(yMin, xMin, yMax, xMax, parseKind(raw.kind), text)
+        return TextBox(yMin, xMin, yMax, xMax, parseKind(raw.kind), text, raw.sourceText?.trim().orEmpty())
     }
 
     private fun parseKind(kind: String?): BoxKind {

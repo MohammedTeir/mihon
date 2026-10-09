@@ -124,14 +124,17 @@ class TextOverlayClient(
                 "Rules:\n" +
                 "- Return one entry per bubble or text box, not one per line. Put all the original text of a " +
                 "bubble into one box.\n" +
-                "- \"box_2d\" is [ymin, xmin, ymax, xmax] on a 0-1000 grid. Make it tight around the visible " +
-                "letter strokes only, with very little padding. Do NOT box the whole bubble, panel, sign, or empty " +
+                "- First transcribe the exact visible source lettering, then translate it. Every readable phrase " +
+                "must have one entry; never omit a bubble, thought, caption, label, screen text, or stylised lettering.\n" +
+                "- \"box_2d\" is [ymin, xmin, ymax, xmax] on a 0-1000 grid. Enclose all visible lettering, including " +
+                "its outline or shadow, with little padding. Do NOT box the whole bubble, panel, sign, or empty " +
                 "space. Never include a face, hair, body, or artwork in a text box. Check that each box actually " +
                 "covers the source lettering and nothing else before replying.\n" +
                 "- \"kind\" is \"bubble\" for speech or thought bubbles, \"caption\" for narration boxes, " +
                 "game or system windows, signs, labels and any other readable text. Use \"sfx\" ONLY for large " +
                 "stylised onomatopoeia drawn as part of the artwork (impact or sound effects), never for sentences.\n" +
-                "- \"text\" is only the translation: natural, concise, no notes, no original text.\n" +
+                "- \"source_text\" is an exact transcription in the original language. \"text\" is its natural, " +
+                "grammatically correct translation into {language}; no notes or invented words.\n" +
                 "- Proofread every translation before replying: correct spelling and standard grammar, no typos " +
                 "and no invented or misspelled words.\n" +
                 "- Include ALL text, also text outside bubbles on plain backgrounds, stylised, outlined, bold or " +
@@ -141,7 +144,8 @@ class TextOverlayClient(
                 "appears exactly once. A readable page or crop must not return an empty boxes list.\n" +
                 "- List the entries in reading order. Ignore page numbers.\n" +
                 "Reply with JSON only, in this format: " +
-                "{\"boxes\":[{\"box_2d\":[ymin,xmin,ymax,xmax],\"kind\":\"bubble\",\"text\":\"...\"}]}\n" +
+                "{\"boxes\":[{\"box_2d\":[ymin,xmin,ymax,xmax]," +
+                "\"kind\":\"bubble\",\"source_text\":\"...\",\"text\":\"...\"}]}\n" +
                 "If the page has no text reply {\"boxes\":[]}."
 
         fun buildPrompt(language: String, extra: String = ""): String {

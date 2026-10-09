@@ -29,16 +29,22 @@ class OverlayResponseParserTest {
         assertTrue(prompt.contains("crops from tall pages"))
         assertTrue(prompt.contains("cut off by crop edges"))
         assertTrue(prompt.contains("second top-to-bottom scan"))
+        assertTrue(prompt.contains("exact visible source lettering"))
+        assertTrue(prompt.contains("Every readable phrase must have one entry"))
+        assertTrue(prompt.contains("source_text"))
+        assertTrue(prompt.contains("outline or shadow"))
     }
 
     @Test
     fun `valid object is parsed`() {
         val boxes = OverlayResponseParser.parse(
-            answer("""{"boxes":[{"box_2d":[100,200,300,400],"kind":"bubble","text":"Hello"}]}"""),
+            answer(
+                """{"boxes":[{"box_2d":[100,200,300,400],"kind":"bubble","source_text":"Hello","text":"مرحبا"}]}""",
+            ),
             json,
         )
 
-        assertEquals(listOf(TextBox(100, 200, 300, 400, BoxKind.BUBBLE, "Hello")), boxes)
+        assertEquals(listOf(TextBox(100, 200, 300, 400, BoxKind.BUBBLE, "مرحبا", "Hello")), boxes)
     }
 
     @Test
