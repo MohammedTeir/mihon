@@ -125,7 +125,8 @@ class TextOverlayClient(
                 "- Return one entry per bubble or text box, not one per line. Put all the original text of a " +
                 "bubble into one box.\n" +
                 "- First transcribe the exact visible source lettering, then translate it. Every readable phrase " +
-                "must have one entry; never omit a bubble, thought, caption, label, screen text, or stylised lettering.\n" +
+                "must have one entry; never omit a bubble, thought, caption, label, " +
+                "screen text, or stylised lettering.\n" +
                 "- \"box_2d\" is [ymin, xmin, ymax, xmax] on a 0-1000 grid. Enclose all visible lettering, including " +
                 "its outline or shadow, with little padding. Do NOT box the whole bubble, panel, sign, or empty " +
                 "space. Never include a face, hair, body, or artwork in a text box. Check that each box actually " +
