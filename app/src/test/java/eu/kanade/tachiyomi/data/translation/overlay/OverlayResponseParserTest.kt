@@ -23,7 +23,7 @@ class OverlayResponseParserTest {
     fun `overlay prompt requests tight glyph bounds away from faces and artwork`() {
         val prompt = TextOverlayClient.buildPrompt("Arabic")
 
-        assertTrue(prompt.contains("letter strokes only"))
+        assertTrue(prompt.contains("Enclose all visible lettering"))
         assertTrue(prompt.contains("Do NOT box the whole bubble, panel, sign, or empty space"))
         assertTrue(prompt.contains("Never include a face, hair, body, or artwork"))
         assertTrue(prompt.contains("crops from tall pages"))
