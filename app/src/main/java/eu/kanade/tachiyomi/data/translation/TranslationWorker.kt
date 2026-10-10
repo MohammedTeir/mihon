@@ -24,9 +24,13 @@ import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.translation.context.Glossary
 import eu.kanade.tachiyomi.data.translation.context.PromptContext
 import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
+import eu.kanade.tachiyomi.data.translation.overlay.DetectedTextRegion
+import eu.kanade.tachiyomi.data.translation.overlay.OverlayTextDetector
 import eu.kanade.tachiyomi.data.translation.overlay.PageOverlayRenderer
+import eu.kanade.tachiyomi.data.translation.overlay.PixelRect
 import eu.kanade.tachiyomi.data.translation.overlay.RenderStyle
 import eu.kanade.tachiyomi.data.translation.overlay.TallPageCropper
+import eu.kanade.tachiyomi.data.translation.overlay.TextCoverage
 import eu.kanade.tachiyomi.data.translation.overlay.TextOverlayClient
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.util.lang.compareToCaseInsensitiveNaturalOrder
@@ -93,6 +97,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
     @Inject private lateinit var overlayClient: TextOverlayClient
 
+    @Inject private lateinit var overlayTextDetector: OverlayTextDetector
+
     @Inject private lateinit var notifier: TranslationNotifier
 
     @Inject private lateinit var getChapter: GetChapter
@@ -155,7 +161,13 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
             try {
                 when (val outcome = translate(chapter, manga, source, apiKey)) {
                     is Outcome.Completed -> {
-                        notifier.showComplete(chapter.id, chapter.name, outcome.seriesName, outcome.alreadyTranslated)
+                        notifier.showComplete(
+                            chapter.id,
+                            chapter.name,
+                            outcome.seriesName,
+                            outcome.alreadyTranslated,
+                            outcome.coverageWarningPages,
+                        )
                         Result.success()
                     }
                     is Outcome.Partial -> {
@@ -165,6 +177,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                             outcome.translated,
                             outcome.total,
                             outcome.failures,
+                            outcome.coverageWarningPages,
                         )
                         Result.failure()
                     }
@@ -279,6 +292,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         // Redraw mode runs pages in parallel and only sends the glossary.
         var previousTexts: List<String> = emptyList()
         val failures = ConcurrentHashMap<Int, TranslationException>()
+        val coverageWarningPages = ConcurrentHashMap.newKeySet<Int>()
         val rateLimitFailures = AtomicInteger(0)
         val stopEarly = AtomicBoolean(false)
 
@@ -292,12 +306,14 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                         semaphore.withPermit {
                             if (stopEarly.get()) return@withPermit
                             try {
+                                var pageCoverageIncomplete = false
                                 val bytes = readPage(page)
                                 val image = if (overlay) {
                                     val uploads = withContext(Dispatchers.Default) {
                                         prepareOverlayUploads(bytes, page.mimeType)
                                     }
                                     val detections = mutableListOf<TallPageCropper.Detection>()
+                                    var recoveryCalls = 0
                                     uploads.forEach { cropUpload ->
                                         val cropBoxes = overlayClient.detectAndTranslate(
                                             cropUpload.bytes,
@@ -310,6 +326,120 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         )
                                         detections += cropBoxes.map {
                                             TallPageCropper.Detection(cropUpload.crop, it)
+                                        }
+
+                                        val coverageBitmap = try {
+                                            withContext(Dispatchers.Default) {
+                                                BitmapFactory.decodeByteArray(
+                                                    cropUpload.bytes,
+                                                    0,
+                                                    cropUpload.bytes.size,
+                                                )
+                                            }
+                                        } catch (e: OutOfMemoryError) {
+                                            logcat(LogPriority.WARN, e) { "Could not allocate OCR coverage image" }
+                                            null
+                                        }
+                                        if (coverageBitmap == null) {
+                                            pageCoverageIncomplete = true
+                                            return@forEach
+                                        }
+
+                                        try {
+                                            val textRegions = overlayTextDetector.detect(coverageBitmap)
+                                            val coverageBoxes = cropBoxes.toMutableList()
+                                            val missing = TextCoverage.missingRegions(
+                                                textRegions,
+                                                coverageBoxes,
+                                                coverageBitmap.width,
+                                                coverageBitmap.height,
+                                                translateSfx,
+                                            )
+                                            val remainingCalls =
+                                                (MAX_RECOVERY_CALLS_PER_PAGE - recoveryCalls).coerceAtLeast(0)
+                                            missing.take(remainingCalls).forEach { region ->
+                                                recoveryCalls++
+                                                try {
+                                                    val recoveryCrop = recoveryCropFor(
+                                                        region,
+                                                        coverageBitmap.width,
+                                                        coverageBitmap.height,
+                                                    )
+                                                    val recoveryBytes = encodeCrop(coverageBitmap, recoveryCrop)
+                                                    val recoveryContext = buildString {
+                                                        append(PromptContext.build(glossary, previousTexts))
+                                                        append(
+                                                            "\n\nTargeted recovery: the OCR pass independently " +
+                                                                "found this source text in the enlarged crop: «",
+                                                        )
+                                                        append(region.text.take(MAX_RECOVERY_TEXT_LENGTH))
+                                                        append("». Translate every readable word of that text only. ")
+                                                        append("Return an empty boxes list if it is not readable. ")
+                                                        append("Keep each box tight to the lettering; do not include ")
+                                                        append("faces, hair, bodies, or other artwork.")
+                                                    }
+                                                    val recoveryBoxes = overlayClient.detectAndTranslate(
+                                                        recoveryBytes,
+                                                        "image/jpeg",
+                                                        apiKey,
+                                                        model,
+                                                        language,
+                                                        delayMillis,
+                                                        recoveryContext,
+                                                    ).mapNotNull { box ->
+                                                        TextCoverage.clampRecoveryBox(
+                                                            box,
+                                                            recoveryCrop,
+                                                            region,
+                                                            coverageBitmap.width,
+                                                            coverageBitmap.height,
+                                                        )
+                                                    }
+                                                    if (TextCoverage.missingRegions(
+                                                            listOf(region),
+                                                            recoveryBoxes,
+                                                            coverageBitmap.width,
+                                                            coverageBitmap.height,
+                                                            translateSfx,
+                                                        ).isEmpty()
+                                                    ) {
+                                                        coverageBoxes += recoveryBoxes
+                                                        detections += recoveryBoxes.map {
+                                                            TallPageCropper.Detection(cropUpload.crop, it)
+                                                        }
+                                                    }
+                                                } catch (e: CancellationException) {
+                                                    throw e
+                                                } catch (e: Exception) {
+                                                    logcat(LogPriority.WARN, e) {
+                                                        "Targeted OCR recovery failed on page ${index + 1}"
+                                                    }
+                                                }
+                                            }
+                                            if (TextCoverage.missingRegions(
+                                                    textRegions,
+                                                    coverageBoxes,
+                                                    coverageBitmap.width,
+                                                    coverageBitmap.height,
+                                                    translateSfx,
+                                                ).isNotEmpty()
+                                            ) {
+                                                pageCoverageIncomplete = true
+                                            }
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            pageCoverageIncomplete = true
+                                            logcat(LogPriority.WARN, e) {
+                                                "OCR coverage check failed on page ${index + 1}"
+                                            }
+                                        } catch (e: OutOfMemoryError) {
+                                            pageCoverageIncomplete = true
+                                            logcat(LogPriority.WARN, e) {
+                                                "OCR coverage check ran out of memory on page ${index + 1}"
+                                            }
+                                        } finally {
+                                            coverageBitmap.recycle()
                                         }
                                     }
                                     val firstUpload = uploads.first()
@@ -343,6 +473,11 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                     )
                                 }
                                 writePage(stagingDir, index, indexWidth, image)
+                                if (overlay && pageCoverageIncomplete) {
+                                    coverageWarningPages += index
+                                } else {
+                                    coverageWarningPages -= index
+                                }
                                 donePages.incrementAndGet()
                                 notifier.showProgress(id, chapter.name, donePages.get(), totalPages)
                             } catch (e: TranslationException) {
@@ -391,11 +526,20 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         }
 
         if (failures.isNotEmpty() || donePages.get() < pages.size) {
-            return Outcome.Partial(donePages.get(), pages.size, failures.values.toList())
+            return Outcome.Partial(
+                donePages.get(),
+                pages.size,
+                failures.values.toList(),
+                coverageWarningPages.size,
+            )
         }
 
         publishChapter(seriesDir, stagingDir, chapterFolder)
-        return Outcome.Completed(seriesName, alreadyTranslated = false)
+        return Outcome.Completed(
+            seriesName,
+            alreadyTranslated = false,
+            coverageWarningPages = coverageWarningPages.size,
+        )
     }
 
     // region Source pages
@@ -575,6 +719,26 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         }
     }
 
+    private fun recoveryCropFor(region: DetectedTextRegion, imageWidth: Int, imageHeight: Int): PixelRect {
+        val imageBounds = PixelRect(0, 0, imageWidth, imageHeight)
+        val horizontalPadding = max(MIN_RECOVERY_CROP_PADDING, region.bounds.width / 2)
+        val verticalPadding = max(MIN_RECOVERY_CROP_PADDING, region.bounds.height)
+        return region.bounds.expandedWithin(horizontalPadding, verticalPadding, imageBounds)
+    }
+
+    private fun encodeCrop(bitmap: Bitmap, crop: PixelRect): ByteArray {
+        val cropBitmap = Bitmap.createBitmap(bitmap, crop.left, crop.top, crop.width, crop.height)
+        return try {
+            val output = ByteArrayOutputStream()
+            if (!cropBitmap.compress(Bitmap.CompressFormat.JPEG, UPLOAD_JPEG_QUALITY, output)) {
+                throw IllegalStateException("Could not encode targeted recovery crop")
+            }
+            output.toByteArray()
+        } finally {
+            if (cropBitmap !== bitmap) cropBitmap.recycle()
+        }
+    }
+
     // endregion
 
     // region Output
@@ -658,8 +822,18 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
     // endregion
 
     private sealed interface Outcome {
-        class Completed(val seriesName: String, val alreadyTranslated: Boolean) : Outcome
-        class Partial(val translated: Int, val total: Int, val failures: List<TranslationException>) : Outcome
+        class Completed(
+            val seriesName: String,
+            val alreadyTranslated: Boolean,
+            val coverageWarningPages: Int = 0,
+        ) : Outcome
+
+        class Partial(
+            val translated: Int,
+            val total: Int,
+            val failures: List<TranslationException>,
+            val coverageWarningPages: Int = 0,
+        ) : Outcome
     }
 
     companion object {
@@ -675,6 +849,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         private const val MAX_AUTO_RETRY_ROUNDS = 3
         private const val AUTO_RETRY_DELAY_MILLIS = 15_000L
         private const val MAX_OFFLINE_ATTEMPTS = 5
+        private const val MAX_RECOVERY_CALLS_PER_PAGE = 6
+        private const val MAX_RECOVERY_TEXT_LENGTH = 500
+        private const val MIN_RECOVERY_CROP_PADDING = 48
 
         private const val MAX_UPLOAD_SIDE = 2048
         private const val MAX_UPLOAD_BYTES = 6 * 1024 * 1024

@@ -66,8 +66,14 @@ class TranslationNotifier(
         context.cancelNotification(Notifications.ID_TRANSLATION_PROGRESS)
     }
 
-    fun showComplete(chapterId: Long, chapterName: String, seriesName: String, alreadyTranslated: Boolean) {
-        val text = context.stringResource(
+    fun showComplete(
+        chapterId: Long,
+        chapterName: String,
+        seriesName: String,
+        alreadyTranslated: Boolean,
+        coverageWarningPages: Int = 0,
+    ) {
+        val baseText = context.stringResource(
             if (alreadyTranslated) {
                 MR.strings.translation_notification_already_text
             } else {
@@ -76,7 +82,11 @@ class TranslationNotifier(
             label(chapterName),
             seriesName,
         )
-        showResult(chapterId, context.stringResource(MR.strings.translation_notification_complete_title), text)
+        showResult(
+            chapterId,
+            context.stringResource(MR.strings.translation_notification_complete_title),
+            withCoverageWarning(baseText, coverageWarningPages),
+        )
     }
 
     /** "X of Y pages translated", with the reasons why the remaining pages failed. */
@@ -86,15 +96,17 @@ class TranslationNotifier(
         translated: Int,
         total: Int,
         failures: Collection<TranslationException>,
+        coverageWarningPages: Int = 0,
     ) {
+        val baseText = context.stringResource(
+            MR.strings.translation_notification_partial_text,
+            label(chapterName),
+            summarizeFailures(failures),
+        )
         showResult(
             chapterId,
             context.stringResource(MR.strings.translation_notification_partial_title, translated, total),
-            context.stringResource(
-                MR.strings.translation_notification_partial_text,
-                label(chapterName),
-                summarizeFailures(failures),
-            ),
+            withCoverageWarning(baseText, coverageWarningPages),
         )
     }
 
@@ -128,6 +140,12 @@ class TranslationNotifier(
             setSmallIcon(R.drawable.ic_translate_24dp)
             setAutoCancel(true)
         }
+    }
+
+    private fun withCoverageWarning(text: String, pages: Int): String {
+        if (pages <= 0) return text
+        val warning = context.stringResource(MR.strings.translation_notification_coverage_warning, pages)
+        return "$text\n$warning"
     }
 
     private fun resultId(chapterId: Long) = Notifications.ID_TRANSLATION_RESULT_BASE - (chapterId % 10_000).toInt()

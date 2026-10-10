@@ -1168,6 +1168,7 @@
     <string name="translation_notification_already_text">%1$s is already in the Local source as “%2$s”. Delete it there first to translate it again.</string>
     <string name="translation_notification_partial_title">Translated %1$d of %2$d pages</string>
     <string name="translation_notification_partial_text">%1$s: %2$s. Tap Translate again to retry only the failed pages.</string>
+    <string name="translation_notification_coverage_warning">Text coverage could not be confirmed on %1$d page(s). Review those translated pages for untranslated text.</string>
     <string name="translation_notification_error_title">Translation failed</string>
 
     <string name="translation_reason_blocked">%1$d blocked by Google\'s content filters</string>
