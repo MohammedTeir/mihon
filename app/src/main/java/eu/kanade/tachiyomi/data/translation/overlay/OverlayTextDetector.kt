@@ -22,14 +22,24 @@ class OverlayTextDetector {
     }
 
     suspend fun detect(bitmap: Bitmap): List<DetectedTextRegion> {
-        return recognize(bitmap).textBlocks.mapNotNull { block ->
-            val rect = block.boundingBox ?: return@mapNotNull null
-            val text = block.text.trim()
-            if (text.isBlank() || rect.width() <= 0 || rect.height() <= 0) return@mapNotNull null
-            DetectedTextRegion(
-                PixelRect(rect.left, rect.top, rect.right, rect.bottom),
-                text,
-            )
+        return recognize(bitmap).textBlocks.flatMap { block ->
+            val lines = block.lines.mapNotNull { line ->
+                val rect = line.boundingBox ?: return@mapNotNull null
+                val text = line.text.trim()
+                if (text.isBlank() || rect.width() <= 0 || rect.height() <= 0) return@mapNotNull null
+                DetectedTextRegion(PixelRect(rect.left, rect.top, rect.right, rect.bottom), text)
+            }
+            if (lines.isNotEmpty()) {
+                lines
+            } else {
+                val rect = block.boundingBox
+                val text = block.text.trim()
+                if (rect == null || text.isBlank() || rect.width() <= 0 || rect.height() <= 0) {
+                    emptyList()
+                } else {
+                    listOf(DetectedTextRegion(PixelRect(rect.left, rect.top, rect.right, rect.bottom), text))
+                }
+            }
         }
     }
 

@@ -47,6 +47,53 @@ class TextCoverageTest {
     }
 
     @Test
+    fun `reports a missed thought bubble line even when a neighboring line is translated`() {
+        val thoughtLine = DetectedTextRegion(PixelRect(10, 10, 90, 24), "He's so focused")
+        val translatedNeighbor = TextBox(260, 100, 400, 900, BoxKind.BUBBLE, "مترجم", "The surgery concludes")
+
+        val missing = TextCoverage.missingRegions(
+            regions = listOf(thoughtLine),
+            boxes = listOf(translatedNeighbor),
+            imageWidth = 100,
+            imageHeight = 100,
+            translateSfx = true,
+        )
+
+        assertEquals(listOf(thoughtLine), missing)
+    }
+
+    @Test
+    fun `reports phone screen text with no matching overlay box`() {
+        val screenText = DetectedTextRegion(PixelRect(120, 340, 460, 372), "Got it on it now")
+
+        val missing = TextCoverage.missingRegions(
+            regions = listOf(screenText),
+            boxes = emptyList(),
+            imageWidth = 700,
+            imageHeight = 1000,
+            translateSfx = true,
+        )
+
+        assertEquals(listOf(screenText), missing)
+    }
+
+    @Test
+    fun `flags intersecting overlay boxes that omit source transcription`() {
+        val screenText = region("Got it on it now")
+        val boxWithoutSource = TextBox(100, 100, 200, 400, BoxKind.CAPTION, "تم", "")
+
+        val missing = TextCoverage.missingRegions(
+            regions = listOf(screenText),
+            boxes = listOf(boxWithoutSource),
+            imageWidth = 100,
+            imageHeight = 100,
+            translateSfx = true,
+        )
+
+        assertEquals(listOf(screenText), missing)
+    }
+
+    @Test
     fun `does not recover sound effects when they are already classified and disabled`() {
         val soundEffect = box("BAM", kind = BoxKind.SFX)
         val missing = TextCoverage.missingRegions(

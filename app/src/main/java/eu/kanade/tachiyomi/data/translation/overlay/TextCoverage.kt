@@ -37,7 +37,7 @@ object TextCoverage {
             if (translatedOverlapping.isEmpty()) return@filter true
 
             val sourceTokens = translatedOverlapping.flatMap { tokens(it.sourceText) }.toSet()
-            if (sourceTokens.isEmpty()) return@filter false
+            if (sourceTokens.isEmpty()) return@filter true
             expectedTokens.count { it in sourceTokens }.toFloat() / expectedTokens.size < MIN_TRANSCRIPTION_COVERAGE
         }
     }
@@ -99,7 +99,7 @@ object TextCoverage {
         .split(WORD_SEPARATOR)
         .filter(String::isNotBlank)
 
-    private const val MIN_REGION_COVERAGE = 0.25f
+    private const val MIN_REGION_COVERAGE = 0.1f
     private const val MIN_TRANSCRIPTION_COVERAGE = 0.9f
     private const val MIN_GLYPH_MARGIN = 3
     private const val GLYPH_MARGIN_RATIO = 0.2f
