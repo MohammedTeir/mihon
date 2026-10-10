@@ -22,7 +22,7 @@ class OverlayTextDetector {
     }
 
     suspend fun detect(bitmap: Bitmap): List<DetectedTextRegion> {
-        return recognize(bitmap).blocks.mapNotNull { block ->
+        return recognize(bitmap).textBlocks.mapNotNull { block ->
             val rect = block.boundingBox ?: return@mapNotNull null
             val text = block.text.trim()
             if (text.isBlank() || rect.width() <= 0 || rect.height() <= 0) return@mapNotNull null
