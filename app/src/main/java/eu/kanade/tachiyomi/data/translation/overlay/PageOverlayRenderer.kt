@@ -237,7 +237,7 @@ object PageOverlayRenderer {
         val padding = max(COVER_MIN_PADDING, (box.width * COVER_PADDING_RATIO).toInt())
         val area = box.expandedWithin(padding, padding, page)
         if (area.isEmpty) return
-        val light = region.textColor?.let { luminance(it) > LIGHT_TEXT_LUMINANCE } ?: false
+        val light = region.textColor?.let { luminanceFloat(it) > LIGHT_TEXT_LUMINANCE } ?: false
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = if (light) Color.argb(COVER_ALPHA, 24, 28, 40) else Color.argb(COVER_ALPHA, 255, 255, 255)
             this.style = Paint.Style.FILL
@@ -251,7 +251,7 @@ object PageOverlayRenderer {
         drawFitted(canvas, text, inner, if (light) Color.WHITE else Color.BLACK, outlined = false, imageWidth, style)
     }
 
-    private fun luminance(color: Int): Float =
+    private fun luminanceFloat(color: Int): Float =
         0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)
 
     /**
