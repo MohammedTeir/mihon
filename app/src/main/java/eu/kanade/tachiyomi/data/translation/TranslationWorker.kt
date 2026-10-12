@@ -23,6 +23,7 @@ import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.translation.context.Glossary
 import eu.kanade.tachiyomi.data.translation.context.PromptContext
+import eu.kanade.tachiyomi.data.translation.overlay.BoxFilter
 import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
 import eu.kanade.tachiyomi.data.translation.overlay.DetectedTextRegion
 import eu.kanade.tachiyomi.data.translation.overlay.OverlayTextDetector
@@ -394,11 +395,19 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                     }
 
                                     val firstUpload = uploads.first()
-                                    val allBoxes = TallPageCropper.mapAndDeduplicate(
+                                    val merged = TallPageCropper.mapAndDeduplicate(
                                         detections,
                                         firstUpload.pageWidth,
                                         firstUpload.pageHeight,
                                     )
+                                    // Logos and watermarks in another script than the page are not translated.
+                                    val allBoxes = BoxFilter.withoutScriptOutliers(merged)
+                                    if (allBoxes.size != merged.size) {
+                                        note {
+                                            "Page ${index + 1}: ignored ${merged.size - allBoxes.size} box(es) " +
+                                                "in a different script than the rest of the page (logo or watermark)"
+                                        }
+                                    }
                                     previousTexts = allBoxes.map { it.text }
                                     note {
                                         "Page ${index + 1}: ${detections.size} detection(s) merged into " +
@@ -432,7 +441,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         note {
                                             "Page ${index + 1}: ${detections.size} detection(s) became " +
                                                 "${boxes.size} box(es); lettered ${rendered.drawn}, " +
-                                                "caption box ${rendered.captioned}, " +
+                                                "covered with a box ${rendered.covered}, " +
                                                 "duplicates dropped ${rendered.duplicates}, " +
                                                 "coverage incomplete: $pageCoverageIncomplete"
                                         }

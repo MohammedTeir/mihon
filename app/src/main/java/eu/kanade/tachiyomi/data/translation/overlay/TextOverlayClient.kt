@@ -65,8 +65,10 @@ class TextOverlayClient(
         if (!isValidApiKey(apiKey)) {
             throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
         }
-        val body = json.encodeToString(
-            buildRequest(image, mimeType, language, promptContext),
+        // An answer that fails to parse usually fails again when the request is identical, so every retry asks with a
+        // little more randomness.
+        fun bodyFor(attempt: Int) = json.encodeToString(
+            buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt)),
         ).toRequestBody(JSON_MEDIA_TYPE)
 
         TranslationLog.step {
@@ -80,7 +82,7 @@ class TextOverlayClient(
             pacer.awaitTurn(baseIntervalMillis)
             val sentAt = System.nanoTime()
             try {
-                val boxes = executeOnce(body, apiKey, model, label)
+                val boxes = executeOnce(bodyFor(attempt), apiKey, model, label)
                 pacer.onSuccess()
                 TranslationLog.step {
                     "$label: answer after ${millisBetween(sentAt, System.nanoTime())} ms " +
@@ -138,8 +140,8 @@ class TextOverlayClient(
                 TranslationLog.step { "$label: HTTP ${it.code}, ${text.length} characters of answer" }
                 throw NanoBananaResponseParser.parseError(it.code, text, json, it.header("Retry-After"))
             }
-            return OverlayResponseParser.parse(text, json) { reason ->
-                TranslationLog.step { "$label: left out a box: $reason" }
+            return OverlayResponseParser.parse(text, json) { note ->
+                TranslationLog.step { "$label: $note" }
             }
         }
     }
@@ -149,6 +151,13 @@ class TextOverlayClient(
     companion object {
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private const val BYTES_PER_KB = 1024
+        private const val DEFAULT_TEMPERATURE = 0.1
+        private const val RETRY_TEMPERATURE_STEP = 0.25
+        private const val MAX_TEMPERATURE = 0.7
+
+        /** 0.1 for the first request, then 0.35, 0.6 and so on up to 0.7. */
+        internal fun temperatureFor(attempt: Int): Double =
+            (DEFAULT_TEMPERATURE + attempt * RETRY_TEMPERATURE_STEP).coerceAtMost(MAX_TEMPERATURE)
         private const val NANOS_PER_MILLI = 1_000_000L
 
         /** Prompt sent with every page. Tweak here. `{language}` is replaced with the target language name. */
@@ -179,7 +188,9 @@ class TextOverlayClient(
                 "skip any line, even if it looks like a title or a decoration.\n" +
                 "- Before replying, do a second top-to-bottom scan and verify every visible readable text region " +
                 "appears exactly once. A readable page or crop must not return an empty boxes list.\n" +
-                "- List the entries in reading order. Ignore page numbers.\n" +
+                "- Ignore watermarks and logos of reading apps or websites, page numbers and decorations that are " +
+                "not part of the story.\n" +
+                "- List the entries in reading order.\n" +
                 "Reply with JSON only, in this format: " +
                 "{\"boxes\":[{\"box_2d\":[ymin,xmin,ymax,xmax]," +
                 "\"kind\":\"bubble\",\"source_text\":\"...\",\"text\":\"...\"}]}\n" +
@@ -195,6 +206,7 @@ class TextOverlayClient(
             mimeType: String,
             language: String,
             extra: String = "",
+            temperature: Double = DEFAULT_TEMPERATURE,
         ) = GenerateContentRequest(
             contents = listOf(
                 RequestContent(
@@ -211,7 +223,7 @@ class TextOverlayClient(
             ),
             generationConfig = GenerationConfig(
                 responseMimeType = "application/json",
-                temperature = 0.1,
+                temperature = temperature,
             ),
         )
     }

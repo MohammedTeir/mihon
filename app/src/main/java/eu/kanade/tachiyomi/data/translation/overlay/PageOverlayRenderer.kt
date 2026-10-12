@@ -28,18 +28,19 @@ object PageOverlayRenderer {
 
     /**
      * @property drawn translations lettered in place over an erased bubble
-     * @property captioned translations put in a caption box because the original could not be erased safely
+     * @property covered translations put in a box that covers the original, because that lettering cannot be erased
+     * without damaging the page (stylised text over artwork, system windows)
      * @property duplicates boxes dropped because they repeated another box
      */
     class Result(
         val bytes: ByteArray,
         val mimeType: String,
         val drawn: Int = 0,
-        val captioned: Int = 0,
+        val covered: Int = 0,
         val duplicates: Int = 0,
     )
 
-    private class Stats(val drawn: Int, val captioned: Int, val duplicates: Int)
+    private class Stats(val drawn: Int, val covered: Int, val duplicates: Int)
 
     private const val MAX_SIDE = 4096
 
@@ -52,6 +53,13 @@ object PageOverlayRenderer {
     private const val CAPTION_BORDER_ALPHA = 150
     private const val CAPTION_CORNER_RATIO = 0.012f
     private const val CAPTION_PADDING_RATIO = 0.04f
+
+    private const val COVER_ALPHA = 235
+    private const val COVER_MIN_PADDING = 4
+    private const val COVER_PADDING_RATIO = 0.03f
+
+    /** Lettering lighter than this (0-255) gets a dark cover box. */
+    private const val LIGHT_TEXT_LUMINANCE = 150f
 
     /** No text on a page may be fitted bigger than this multiple of the page's median fitted size. */
     private const val SIZE_CAP_FACTOR = 1.35f
@@ -76,7 +84,7 @@ object PageOverlayRenderer {
             if (!bitmap.compress(Bitmap.CompressFormat.JPEG, OUTPUT_QUALITY, out)) {
                 throw TranslationException.CorruptPage("could not encode the result")
             }
-            return Result(out.toByteArray(), "image/jpeg", stats.drawn, stats.captioned, stats.duplicates)
+            return Result(out.toByteArray(), "image/jpeg", stats.drawn, stats.covered, stats.duplicates)
         } catch (e: OutOfMemoryError) {
             throw TranslationException.CorruptPage("page too large to process", e)
         } finally {
@@ -110,7 +118,7 @@ object PageOverlayRenderer {
     ): Stats {
         if (style.placement == RenderStyle.Placement.BELOW) {
             drawCaptions(bitmap, allBoxes, style)
-            return Stats(drawn = 0, captioned = allBoxes.size, duplicates = 0)
+            return Stats(drawn = 0, covered = 0, duplicates = 0)
         }
 
         val imageRect = PixelRect(0, 0, bitmap.width, bitmap.height)
@@ -138,33 +146,46 @@ object PageOverlayRenderer {
             val count: Int,
         )
 
-        val all = groups.map { group ->
-            val kind = boxes[group.first()].kind
+        fun itemFor(index: Int) = Item(
+            regions[index],
+            boxes[index].text,
+            pixelBoxes[index],
+            BubbleGrouping.canRenderSafely(boxes[index].kind, regions[index]),
+            boxes[index].kind,
+            1,
+        )
+
+        val all = groups.flatMap { group ->
             if (group.size == 1) {
-                val region = regions[group.first()]
-                Item(
-                    region,
-                    boxes[group.first()].text,
-                    pixelBoxes[group.first()],
-                    BubbleGrouping.canRenderSafely(kind, region),
-                    kind,
-                    1,
-                )
+                listOf(itemFor(group.first()))
             } else {
+                val kind = boxes[group.first()].kind
                 val union = group.map { pixelBoxes[it] }.reduce(PixelRect::union)
                 val text = BubbleGrouping.mergedText(group.map { boxes[it] })
                 val region = regionFor(bitmap, union, imageRect, traceBubble = kind == BoxKind.BUBBLE)
-                Item(region, text, union, BubbleGrouping.canRenderSafely(kind, region), kind, group.size)
+                if (BubbleGrouping.canRenderSafely(kind, region)) {
+                    listOf(Item(region, text, union, true, kind, group.size))
+                } else {
+                    // Touching bubbles share an outline, so together they cannot be traced as one bubble. Every box
+                    // was traced on its own in the first pass, so use those results.
+                    log(
+                        "${group.size} boxes at [${union.left},${union.top},${union.right},${union.bottom}] " +
+                            "cannot be traced together, each box is handled on its own",
+                    )
+                    group.map(::itemFor)
+                }
             }
         }
         for (item in all) {
             val share = (item.region.inkErasedShare * PERCENT).toInt()
             val how = if (item.region.fromFloodFill) "bubble traced" else "open text"
-            val decision = if (item.safe) {
-                "lettered in place ($how, flat surroundings ${item.region.flatSurroundings}, erased ink $share%)"
-            } else {
-                "NOT safe to erase ($how, flat surroundings ${item.region.flatSurroundings}, " +
-                    "erased ink $share%), goes into a caption box"
+            val decision = when {
+                item.safe ->
+                    "lettered in place ($how, flat surroundings ${item.region.flatSurroundings}, erased ink $share%)"
+                item.kind == BoxKind.SFX -> "sound effect that cannot be erased safely, left as it is"
+                else ->
+                    "NOT safe to erase ($how, flat surroundings ${item.region.flatSurroundings}, " +
+                        "erased ink $share%), covered with a box"
             }
             log(
                 "${item.kind.name.lowercase()} of ${item.count} box(es) at " +
@@ -173,9 +194,9 @@ object PageOverlayRenderer {
             )
         }
         val items = all.filter { it.safe }
-        // The original cannot be erased without damaging the page (artwork behind it, stylised lettering). The
-        // translation then goes into a caption box next to it instead of being left out.
-        val fallback = all.filter { !it.safe && it.text.isNotBlank() }
+        // The original cannot be erased without damaging the page (artwork behind it, stylised lettering). A box
+        // that covers it carries the translation instead. A sound effect is rather left as it is.
+        val covered = all.filter { !it.safe && it.text.isNotBlank() && it.kind != BoxKind.SFX }
 
         val canvas = Canvas(bitmap)
         val erase = Paint().apply { this.style = Paint.Style.FILL }
@@ -194,15 +215,44 @@ object PageOverlayRenderer {
             drawText(canvas, item.text, item.region, bitmap.width, style, size)
         }
 
-        if (fallback.isNotEmpty()) {
-            val caption = captionStyleFor(bitmap)
-            val placed = items.map { it.region.textRect }.toMutableList()
-            for (item in fallback.sortedBy { it.box.top }) {
-                drawCaptionBox(canvas, bitmap, item.box, item.text.trim(), placed, caption, style)
-            }
+        for (item in covered.sortedBy { it.box.top }) {
+            drawCoverBox(canvas, item.region, item.box, item.text.trim(), imageRect, bitmap.width, style)
         }
-        return Stats(drawn = items.size, captioned = fallback.size, duplicates = allBoxes.size - boxes.size)
+        return Stats(drawn = items.size, covered = covered.size, duplicates = allBoxes.size - boxes.size)
     }
+
+    /**
+     * For lettering that cannot be erased: a rounded box that covers the original and carries the translation, so no
+     * half erased original is left behind. Light lettering gets a dark box, dark lettering a light one.
+     */
+    private fun drawCoverBox(
+        canvas: Canvas,
+        region: BubbleRegion,
+        box: PixelRect,
+        text: String,
+        page: PixelRect,
+        imageWidth: Int,
+        style: RenderStyle,
+    ) {
+        val padding = max(COVER_MIN_PADDING, (box.width * COVER_PADDING_RATIO).toInt())
+        val area = box.expandedWithin(padding, padding, page)
+        if (area.isEmpty) return
+        val light = region.textColor?.let { luminance(it) > LIGHT_TEXT_LUMINANCE } ?: false
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (light) Color.argb(COVER_ALPHA, 24, 28, 40) else Color.argb(COVER_ALPHA, 255, 255, 255)
+            this.style = Paint.Style.FILL
+        }
+        val radius = imageWidth * CAPTION_CORNER_RATIO
+        val rect = RectF(area.left.toFloat(), area.top.toFloat(), area.right.toFloat(), area.bottom.toFloat())
+        canvas.drawRoundRect(rect, radius, radius, fill)
+
+        val inset = padding / 2
+        val inner = PixelRect(area.left + inset, area.top + inset, area.right - inset, area.bottom - inset)
+        drawFitted(canvas, text, inner, if (light) Color.WHITE else Color.BLACK, outlined = false, imageWidth, style)
+    }
+
+    private fun luminance(color: Int): Float =
+        0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)
 
     /**
      * Leaves the page as it is and puts every translation in a caption box next to its original text. For layouts

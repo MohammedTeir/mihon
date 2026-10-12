@@ -26,6 +26,21 @@ object OverlayResponseParser {
     )
 
     private const val MAX_DETAIL_LENGTH = 200
+    private const val UNICODE_ESCAPE_LENGTH = 5
+    private const val HEX_RADIX = 16
+
+    private val BOX_START = Regex("\\{\\s*\"box_2d\"\\s*:")
+    private const val NUMBER = "(-?\\d+(?:\\.\\d+)?)"
+    private val BOX_NUMBERS = Regex(
+        "\"box_2d\"\\s*:\\s*\\[\\s*(?:\\[\\s*)?$NUMBER\\s*,\\s*$NUMBER\\s*,\\s*$NUMBER\\s*,\\s*$NUMBER",
+    )
+    private val KIND_FIELD = Regex("\"kind\"\\s*:\\s*\"([^\"]*)\"")
+    private val SOURCE_FIELD = Regex(
+        "\"source_text\"\\s*:\\s*\"(.*?)\"\\s*,\\s*\"text\"\\s*:",
+        RegexOption.DOT_MATCHES_ALL,
+    )
+    private val TEXT_FIELD = Regex("\"text\"\\s*:\\s*\"(.*)\"[\\s,\\]}]*$", RegexOption.DOT_MATCHES_ALL)
+    private val ESCAPE = Regex("\\\\(u[0-9a-fA-F]{4}|.)", RegexOption.DOT_MATCHES_ALL)
 
     /**
      * @return the text boxes of the page, possibly empty when the page has no text.
@@ -77,8 +92,20 @@ object OverlayResponseParser {
 
         val element = try {
             json.parseToJsonElement(answer.substring(start, end + 1))
-        } catch (_: IllegalArgumentException) {
-            throw TranslationException.UnreadableAnswer("Invalid JSON")
+        } catch (e: IllegalArgumentException) {
+            // Small models sometimes leave a quote or a control character unescaped inside a translation. One bad
+            // character must not cost the whole page, so read the boxes field by field instead.
+            val salvaged = salvageBoxes(answer, onDropped)
+            if (salvaged.isNotEmpty()) {
+                onDropped(
+                    "the answer was not valid JSON (${e.message.orEmpty().take(MAX_DETAIL_LENGTH)}), " +
+                        "recovered ${salvaged.size} box(es) by reading the fields directly",
+                )
+                return salvaged
+            }
+            throw TranslationException.UnreadableAnswer(
+                "Invalid JSON: ${e.message.orEmpty().take(MAX_DETAIL_LENGTH)}",
+            )
         }
 
         val array: JsonArray = when (element) {
@@ -90,22 +117,39 @@ object OverlayResponseParser {
         return array.mapNotNull { toTextBox(it, json, onDropped) }
     }
 
+    /** Some answers wrap the four numbers once more: `"box_2d":[[ymin,xmin,ymax,xmax]]`. */
+    private fun flattenBox(element: JsonElement): JsonElement {
+        val obj = element as? JsonObject ?: return element
+        val box = obj["box_2d"] as? JsonArray ?: return element
+        val inner = box.singleOrNull() as? JsonArray ?: return element
+        return JsonObject(obj + ("box_2d" to inner))
+    }
+
     private fun toTextBox(element: JsonElement, json: Json, onDropped: (String) -> Unit): TextBox? {
         val raw = try {
-            json.decodeFromJsonElement<RawBox>(element)
+            json.decodeFromJsonElement<RawBox>(flattenBox(element))
         } catch (_: IllegalArgumentException) {
-            onDropped("not a box object: ${element.toString().take(MAX_DETAIL_LENGTH)}")
+            onDropped("left out a box: not a box object: ${element.toString().take(MAX_DETAIL_LENGTH)}")
             return null
         }
 
-        val text = raw.text?.trim().orEmpty()
-        val coordinates = raw.box
+        return makeBox(raw.box, raw.kind, raw.text?.trim().orEmpty(), raw.sourceText?.trim().orEmpty(), onDropped)
+    }
+
+    /** Checks the numbers and text of one box and builds it, or reports why it is left out. */
+    private fun makeBox(
+        coordinates: List<Double>?,
+        kind: String?,
+        text: String,
+        sourceText: String,
+        onDropped: (String) -> Unit,
+    ): TextBox? {
         if (text.isEmpty()) {
-            onDropped("no translated text, source \"${raw.sourceText.orEmpty().take(MAX_DETAIL_LENGTH)}\"")
+            onDropped("left out a box: no translated text, source \"${sourceText.take(MAX_DETAIL_LENGTH)}\"")
             return null
         }
         if (coordinates == null || coordinates.size != 4 || coordinates.any { !it.isFinite() }) {
-            onDropped("box_2d is not four numbers, text \"${text.take(MAX_DETAIL_LENGTH)}\"")
+            onDropped("left out a box: box_2d is not four numbers, text \"${text.take(MAX_DETAIL_LENGTH)}\"")
             return null
         }
 
@@ -115,11 +159,45 @@ object OverlayResponseParser {
         val xMin = minOf(values[1], values[3])
         val xMax = maxOf(values[1], values[3])
         if (yMax - yMin < 1 || xMax - xMin < 1) {
-            onDropped("box has no area $values, text \"${text.take(MAX_DETAIL_LENGTH)}\"")
+            onDropped("left out a box: box has no area $values, text \"${text.take(MAX_DETAIL_LENGTH)}\"")
             return null
         }
 
-        return TextBox(yMin, xMin, yMax, xMax, parseKind(raw.kind), text, raw.sourceText?.trim().orEmpty())
+        return TextBox(yMin, xMin, yMax, xMax, parseKind(kind), text, sourceText)
+    }
+
+    /**
+     * Reads boxes out of an answer that is not valid JSON. Every box starts with `{"box_2d"`, so the answer is cut
+     * there and the fields of each piece are read with patterns that do not care about stray quotes in the text.
+     * A piece that is cut off (no closing quote) is skipped.
+     */
+    internal fun salvageBoxes(answer: String, onDropped: (String) -> Unit = {}): List<TextBox> {
+        val starts = BOX_START.findAll(answer).map { it.range.first }.toList()
+        if (starts.isEmpty()) return emptyList()
+        return starts.mapIndexedNotNull { index, from ->
+            val chunk = answer.substring(from, starts.getOrNull(index + 1) ?: answer.length)
+            val numbers = BOX_NUMBERS.find(chunk)?.groupValues?.drop(1)?.map { it.toDouble() }
+            val kind = KIND_FIELD.find(chunk)?.groupValues?.get(1)
+            val source = SOURCE_FIELD.find(chunk)?.groupValues?.get(1)?.let(::unescape).orEmpty().trim()
+            val text = TEXT_FIELD.find(chunk)?.groupValues?.get(1)?.let(::unescape).orEmpty().trim()
+            if (text.isEmpty() && numbers != null) {
+                onDropped(
+                    "left out a box: could not read its text (cut off?), source \"${source.take(MAX_DETAIL_LENGTH)}\"",
+                )
+            }
+            makeBox(numbers, kind, text, source, onDropped)
+        }
+    }
+
+    /** Turns the JSON escapes of a string that was cut out by hand back into characters. */
+    private fun unescape(raw: String): String = ESCAPE.replace(raw) { match ->
+        val code = match.groupValues[1]
+        when {
+            code.length == UNICODE_ESCAPE_LENGTH && code.startsWith("u") ->
+                code.substring(1).toInt(HEX_RADIX).toChar().toString()
+            code == "n" || code == "t" || code == "r" -> " "
+            else -> code
+        }
     }
 
     private fun parseKind(kind: String?): BoxKind {

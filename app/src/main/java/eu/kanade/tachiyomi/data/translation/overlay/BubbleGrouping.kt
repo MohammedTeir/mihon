@@ -43,7 +43,9 @@ object BubbleGrouping {
     fun canRenderSafely(kind: BoxKind, region: BubbleRegion): Boolean {
         if (region.fromFloodFill) return true
         if (region.inkErasedShare < MIN_ERASED_SHARE) return false
-        return kind != BoxKind.BUBBLE || region.flatSurroundings
+        // A bubble outline with gaps or spikes (dashed, burst) leaves a few outline pixels in the ring around the
+        // lettering, so the surroundings only need to be mostly flat, but the lettering must really be erased.
+        return kind != BoxKind.BUBBLE || (region.flatSurroundings && region.inkErasedShare >= MIN_UNTRACED_ERASED_SHARE)
     }
 
     /**
@@ -127,6 +129,7 @@ object BubbleGrouping {
         text.lowercase().split(WORD_SEPARATOR).filter { it.isNotBlank() }.toSet()
 
     private const val MIN_ERASED_SHARE = 0.6f
+    private const val MIN_UNTRACED_ERASED_SHARE = 0.7f
     private const val MIN_DUPLICATE_OVERLAP = 0.5f
     private const val MIN_CONTAINED_LENGTH = 8
     private const val MIN_OVERLAP_TOKENS = 3

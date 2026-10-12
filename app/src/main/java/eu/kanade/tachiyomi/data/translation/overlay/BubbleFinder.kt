@@ -646,7 +646,7 @@ object BubbleFinder {
     private const val WHITE = -1 // 0xFFFFFFFF
 
     /** Share of the ring around open text that must have the page colour for the surroundings to count as flat. */
-    private const val MIN_FLAT_SHARE = 0.92f
+    private const val MIN_FLAT_SHARE = 0.75f
 
     /** A pixel this far from the page colour is clearly visible lettering (matches the eraser's threshold). */
     private const val INK_DISTANCE = 70
