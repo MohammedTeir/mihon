@@ -30,4 +30,14 @@ class AiModelCatalogTest {
     fun `unknown provider falls back to Gemini for legacy preferences`() {
         assertEquals(AiProvider.GEMINI, AiProvider.fromId("removed-provider"))
     }
+
+    @Test
+    fun `next provider batch is registered`() {
+        assertEquals("https://api.groq.com/openai/v1", AiProvider.GROQ.defaultBaseUrl)
+        assertEquals("https://api.together.xyz/v1", AiProvider.TOGETHER.defaultBaseUrl)
+        assertEquals("https://api.mistral.ai/v1", AiProvider.MISTRAL.defaultBaseUrl)
+        assertEquals("https://api.x.ai/v1", AiProvider.XAI.defaultBaseUrl)
+        assertEquals("https://api.deepseek.com/v1", AiProvider.DEEPSEEK.defaultBaseUrl)
+        assertEquals("https://api.anthropic.com/v1", AiProvider.ANTHROPIC.defaultBaseUrl)
+    }
 }

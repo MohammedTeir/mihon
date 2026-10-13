@@ -12,6 +12,12 @@ enum class AiProvider(
     GEMINI("gemini", "Google Gemini", "https://generativelanguage.googleapis.com/v1beta", true),
     OPENAI("openai", "OpenAI", "https://api.openai.com/v1", false),
     OPENROUTER("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", false),
+    GROQ("groq", "Groq", "https://api.groq.com/openai/v1", false),
+    TOGETHER("together", "Together AI", "https://api.together.xyz/v1", false),
+    MISTRAL("mistral", "Mistral AI", "https://api.mistral.ai/v1", false),
+    XAI("xai", "xAI", "https://api.x.ai/v1", false),
+    DEEPSEEK("deepseek", "DeepSeek", "https://api.deepseek.com/v1", false),
+    ANTHROPIC("anthropic", "Anthropic Claude", "https://api.anthropic.com/v1", false),
     CUSTOM("custom", "Custom OpenAI-compatible endpoint", null, false),
     ;
 

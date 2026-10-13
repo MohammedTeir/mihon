@@ -40,12 +40,24 @@ class AiModelDiscovery(
         val endpoint = when (provider) {
             AiProvider.GEMINI -> "https://generativelanguage.googleapis.com/v1beta/models"
             AiProvider.OPENROUTER -> "https://openrouter.ai/api/v1/models"
-            AiProvider.OPENAI, AiProvider.CUSTOM -> "${(baseUrl ?: provider.defaultBaseUrl).orEmpty().trimEnd(
-                '/',
-            )}/models"
+            AiProvider.ANTHROPIC -> "https://api.anthropic.com/v1/models"
+            AiProvider.OPENAI,
+            AiProvider.GROQ,
+            AiProvider.TOGETHER,
+            AiProvider.MISTRAL,
+            AiProvider.XAI,
+            AiProvider.DEEPSEEK,
+            AiProvider.CUSTOM,
+            -> "${(baseUrl ?: provider.defaultBaseUrl).orEmpty().trimEnd('/')}/models"
         }
         val headers = when (provider) {
             AiProvider.GEMINI -> Headers.headersOf("x-goog-api-key", apiKey.trim())
+            AiProvider.ANTHROPIC -> Headers.headersOf(
+                "x-api-key",
+                apiKey.trim(),
+                "anthropic-version",
+                ANTHROPIC_VERSION,
+            )
             else -> Headers.headersOf("Authorization", "Bearer ${apiKey.trim()}")
         }
         val response = try {
@@ -72,7 +84,9 @@ class AiModelDiscovery(
             val methods = item["supportedGenerationMethods"]?.jsonArray?.mapNotNull {
                 it.jsonPrimitive.contentOrNull
             }.orEmpty()
-            val name = item["displayName"]?.jsonPrimitive?.contentOrNull ?: id
+            val name = item["displayName"]?.jsonPrimitive?.contentOrNull
+                ?: item["display_name"]?.jsonPrimitive?.contentOrNull
+                ?: id
             AiModel(id = id, name = name, capabilities = capabilities(provider, id, methods, item))
         }.distinctBy { it.id }
     }
@@ -90,7 +104,9 @@ class AiModelDiscovery(
             ?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
         val imageInput = provider == AiProvider.GEMINI ||
             inputModalities.any { it.equals("image", ignoreCase = true) } ||
-            lower.contains("vision") || lower.contains("4o") || lower.contains("gemini") || lower.contains("vl")
+            provider == AiProvider.ANTHROPIC || lower.contains("vision") || lower.contains("4o") ||
+            lower.contains("gemini") ||
+            lower.contains("vl") || lower.contains("pixtral") || lower.contains("grok") || lower.contains("llama-4")
         val imageOutput = provider.supportsImageGeneration &&
             (
                 outputModalities.any { it.equals("image", ignoreCase = true) } ||
@@ -99,9 +115,7 @@ class AiModelDiscovery(
         return buildSet {
             add(AiCapability.TEXT_GENERATION.name)
             if (imageInput) add(AiCapability.IMAGE_INPUT.name)
-            if (provider == AiProvider.GEMINI || provider == AiProvider.OPENAI || provider == AiProvider.OPENROUTER ||
-                provider == AiProvider.CUSTOM
-            ) {
+            if (provider != AiProvider.GEMINI) {
                 add(AiCapability.JSON_SCHEMA.name)
             }
             if (imageOutput) add(AiCapability.IMAGE_GENERATION.name)
@@ -114,5 +128,9 @@ class AiModelDiscovery(
         429 -> TranslationException.RateLimited(null)
         in 500..599 -> TranslationException.ServerError(code)
         else -> TranslationException.RequestRejected(code, "model listing failed (${body.length} bytes)")
+    }
+
+    private companion object {
+        const val ANTHROPIC_VERSION = "2023-06-01"
     }
 }

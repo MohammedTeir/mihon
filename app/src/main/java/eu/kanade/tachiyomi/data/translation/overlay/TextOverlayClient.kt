@@ -82,6 +82,8 @@ class TextOverlayClient(
         fun bodyFor(attempt: Int) = (
             if (provider == AiProvider.GEMINI) {
                 json.encodeToString(buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt)))
+            } else if (provider == AiProvider.ANTHROPIC) {
+                buildAnthropicRequest(image, mimeType, language, promptContext, temperatureFor(attempt)).toString()
             } else {
                 buildOpenAiRequest(model, image, mimeType, language, promptContext, temperatureFor(attempt)).toString()
             }
@@ -143,6 +145,8 @@ class TextOverlayClient(
     ): List<TextBox> {
         val endpoint = if (provider == AiProvider.GEMINI) {
             "$GEMINI_BASE_URL/$model:generateContent"
+        } else if (provider == AiProvider.ANTHROPIC) {
+            "${provider.defaultBaseUrl}/messages"
         } else {
             "${(
                 baseUrl.takeIf { provider == AiProvider.CUSTOM && it.isNotBlank() }
@@ -153,6 +157,13 @@ class TextOverlayClient(
             url = endpoint,
             headers = if (provider == AiProvider.GEMINI) {
                 Headers.headersOf("x-goog-api-key", apiKey.trim())
+            } else if (provider == AiProvider.ANTHROPIC) {
+                Headers.headersOf(
+                    "x-api-key",
+                    apiKey.trim(),
+                    "anthropic-version",
+                    ANTHROPIC_VERSION,
+                )
             } else {
                 Headers.headersOf("Authorization", "Bearer ${apiKey.trim()}")
             },
@@ -175,6 +186,14 @@ class TextOverlayClient(
                 TranslationLog.step { "$label: HTTP ${it.code}, ${text.length} characters of answer" }
                 throw if (provider == AiProvider.GEMINI) {
                     NanoBananaResponseParser.parseError(it.code, text, json, it.header("Retry-After"))
+                } else if (provider == AiProvider.ANTHROPIC) {
+                    when (it.code) {
+                        401, 403 -> TranslationException.InvalidApiKey("provider rejected the key")
+                        404 -> TranslationException.ModelNotFound(model)
+                        429 -> TranslationException.RateLimited(null)
+                        in 500..599 -> TranslationException.ServerError(it.code)
+                        else -> TranslationException.RequestRejected(it.code, "provider request failed")
+                    }
                 } else {
                     when (it.code) {
                         401, 403 -> TranslationException.InvalidApiKey("provider rejected the key")
@@ -185,7 +204,11 @@ class TextOverlayClient(
                     }
                 }
             }
-            val answer = if (provider == AiProvider.GEMINI) text else extractOpenAiContent(text)
+            val answer = when (provider) {
+                AiProvider.GEMINI -> text
+                AiProvider.ANTHROPIC -> extractAnthropicContent(text)
+                else -> extractOpenAiContent(text)
+            }
             return OverlayResponseParser.parse(answer, json) { note ->
                 TranslationLog.step { "$label: $note" }
             }
@@ -199,6 +222,12 @@ class TextOverlayClient(
         return content.jsonPrimitive.contentOrNull ?: content.toString()
     }
 
+    private fun extractAnthropicContent(body: String): String {
+        return json.parseToJsonElement(body).jsonObject["content"]?.jsonArray
+            ?.firstOrNull()?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull
+            ?: throw TranslationException.UnreadableAnswer("missing content[0].text")
+    }
+
     private fun millisBetween(from: Long, to: Long) = (to - from) / NANOS_PER_MILLI
 
     companion object {
@@ -207,6 +236,7 @@ class TextOverlayClient(
         private const val DEFAULT_TEMPERATURE = 0.1
         private const val RETRY_TEMPERATURE_STEP = 0.25
         private const val MAX_TEMPERATURE = 0.7
+        private const val ANTHROPIC_VERSION = "2023-06-01"
 
         /** 0.1 for the first request, then 0.35, 0.6 and so on up to 0.7. */
         internal fun temperatureFor(attempt: Int): Double =
@@ -309,6 +339,42 @@ class TextOverlayClient(
                 }
             }
             putJsonArray("required") { add(kotlinx.serialization.json.JsonPrimitive("boxes")) }
+        }
+
+        internal fun buildAnthropicRequest(
+            image: ByteArray,
+            mimeType: String,
+            language: String,
+            extra: String = "",
+            temperature: Double = DEFAULT_TEMPERATURE,
+        ): JsonElement = buildJsonObject {
+            put("max_tokens", 4096)
+            put("temperature", temperature)
+            putJsonArray("messages") {
+                add(
+                    buildJsonObject {
+                        put("role", "user")
+                        putJsonArray("content") {
+                            add(
+                                buildJsonObject {
+                                    put("type", "text")
+                                    put("text", buildPrompt(language, extra))
+                                },
+                            )
+                            add(
+                                buildJsonObject {
+                                    put("type", "image")
+                                    putJsonObject("source") {
+                                        put("type", "base64")
+                                        put("media_type", mimeType)
+                                        put("data", Base64.getEncoder().encodeToString(image))
+                                    }
+                                },
+                            )
+                        }
+                    },
+                )
+            }
         }
 
         internal fun buildOpenAiRequest(
