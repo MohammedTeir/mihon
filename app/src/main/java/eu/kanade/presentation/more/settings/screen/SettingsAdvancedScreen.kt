@@ -362,10 +362,8 @@ object SettingsAdvancedScreen : SearchableSettings {
         val scope = rememberCoroutineScope()
         val enabledPref = remember { translationPreferences.enabled() }
         val providerPref = remember { translationPreferences.provider() }
-        val modelPref = remember { translationPreferences.model() }
         val targetLanguagePref = remember { translationPreferences.targetLanguage() }
         val modePref = remember { translationPreferences.mode() }
-        val textModelPref = remember { translationPreferences.textModel() }
         val sfxPref = remember { translationPreferences.translateSfx() }
         val delayPref = remember { translationPreferences.requestDelaySeconds() }
         val fontPref = remember { translationPreferences.fontStyle() }
@@ -376,6 +374,8 @@ object SettingsAdvancedScreen : SearchableSettings {
         val providerId by providerPref.collectAsState()
         val mode by modePref.collectAsState()
         val provider = AiProvider.fromId(providerId)
+        val modelPref = remember(provider) { translationPreferences.model(provider) }
+        val textModelPref = remember(provider) { translationPreferences.textModel(provider) }
         val apiKeyPref = remember(provider) { translationPreferences.apiKey(provider) }
         val customBaseUrlPref = remember { translationPreferences.customBaseUrl() }
         val catalogPref = remember(provider) { translationPreferences.modelCatalog(provider) }
@@ -392,16 +392,14 @@ object SettingsAdvancedScreen : SearchableSettings {
             }
             discoveredModels.filter { required.all(it::supports) }
                 .associate { it.id to "${it.name} (${it.id})" }
-                .ifEmpty {
-                    val selected = if (overlay) textModelPref.get() else modelPref.get()
-                    mapOf(selected to selected)
-                }
         }
 
-        val modeEntries = mapOf(
-            TranslationOptions.MODE_REDRAW to stringResource(MR.strings.pref_translation_mode_redraw),
-            TranslationOptions.MODE_OVERLAY to stringResource(MR.strings.pref_translation_mode_overlay),
-        )
+        val modeEntries = buildMap {
+            if (provider.supportsImageGeneration) {
+                put(TranslationOptions.MODE_REDRAW, stringResource(MR.strings.pref_translation_mode_redraw))
+            }
+            put(TranslationOptions.MODE_OVERLAY, stringResource(MR.strings.pref_translation_mode_overlay))
+        }
         val fontEntries = mapOf(
             "bold" to stringResource(MR.strings.translation_font_bold),
             "regular" to stringResource(MR.strings.translation_font_regular),
@@ -435,6 +433,14 @@ object SettingsAdvancedScreen : SearchableSettings {
                         preference = providerPref,
                         entries = AiProvider.entries.associate { it.id to it.displayName },
                         title = "AI provider",
+                        onValueChanged = {
+                            if (!AiProvider.fromId(it).supportsImageGeneration &&
+                                modePref.get() == TranslationOptions.MODE_REDRAW
+                            ) {
+                                modePref.set(TranslationOptions.MODE_OVERLAY)
+                            }
+                            true
+                        },
                     ),
                 )
                 if (provider == AiProvider.CUSTOM) {
@@ -449,7 +455,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                 add(
                     Preference.PreferenceItem.EditTextPreference(
                         preference = apiKeyPref,
-                        title = stringResource(MR.strings.pref_translation_api_key),
+                        title = "${provider.displayName} API key",
                         // Fixed subtitle without "%s" so the stored key is never shown in the list.
                         subtitle = if (apiKey.isBlank()) {
                             stringResource(MR.strings.pref_translation_api_key_not_set)
@@ -503,13 +509,21 @@ object SettingsAdvancedScreen : SearchableSettings {
                     ),
                 )
                 if (overlay) {
-                    add(
-                        Preference.PreferenceItem.ListPreference(
-                            preference = textModelPref,
-                            entries = modelEntries,
-                            title = stringResource(MR.strings.pref_translation_text_model),
-                        ),
-                    )
+                    if (modelEntries.isEmpty()) {
+                        add(
+                            Preference.PreferenceItem.InfoPreference(
+                                "No compatible text models discovered. Add an API key and refresh available models.",
+                            ),
+                        )
+                    } else {
+                        add(
+                            Preference.PreferenceItem.ListPreference(
+                                preference = textModelPref,
+                                entries = modelEntries,
+                                title = stringResource(MR.strings.pref_translation_text_model),
+                            ),
+                        )
+                    }
                     add(
                         Preference.PreferenceItem.SwitchPreference(
                             preference = sfxPref,
@@ -547,13 +561,21 @@ object SettingsAdvancedScreen : SearchableSettings {
                         ),
                     )
                 } else {
-                    add(
-                        Preference.PreferenceItem.ListPreference(
-                            preference = modelPref,
-                            entries = modelEntries,
-                            title = stringResource(MR.strings.pref_translation_model),
-                        ),
-                    )
+                    if (modelEntries.isEmpty()) {
+                        add(
+                            Preference.PreferenceItem.InfoPreference(
+                                "No compatible image models discovered for this provider.",
+                            ),
+                        )
+                    } else {
+                        add(
+                            Preference.PreferenceItem.ListPreference(
+                                preference = modelPref,
+                                entries = modelEntries,
+                                title = stringResource(MR.strings.pref_translation_model),
+                            ),
+                        )
+                    }
                 }
                 add(
                     Preference.PreferenceItem.ListPreference(

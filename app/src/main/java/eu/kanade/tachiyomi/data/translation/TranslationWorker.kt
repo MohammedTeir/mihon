@@ -233,7 +233,11 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
     private suspend fun translate(chapter: Chapter, manga: Manga, source: Source, apiKey: String): Outcome {
         val language = translationPreferences.targetLanguage().get()
         val overlay = translationPreferences.mode().get() == TranslationOptions.MODE_OVERLAY
-        val model = if (overlay) translationPreferences.textModel().get() else translationPreferences.model().get()
+        val model = if (overlay) {
+            translationPreferences.textModel(activeProvider).get()
+        } else {
+            translationPreferences.model(activeProvider).get()
+        }
 
         val chapterDir = downloadProvider.findChapterDir(
             chapter.name,

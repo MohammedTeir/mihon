@@ -37,11 +37,25 @@ class TranslationPreferences(
         TranslationOptions.DEFAULT_LANGUAGE,
     )
 
-    fun model() = preferenceStore.getString("pref_translation_model", TranslationOptions.DEFAULT_MODEL)
+    fun model(provider: AiProvider = AiProvider.GEMINI) = preferenceStore.getString(
+        "pref_translation_model_${provider.id}",
+        if (provider == AiProvider.GEMINI) {
+            preferenceStore.getString("pref_translation_model", TranslationOptions.DEFAULT_MODEL).get()
+        } else {
+            ""
+        },
+    )
 
     fun mode() = preferenceStore.getString("pref_translation_mode", TranslationOptions.MODE_REDRAW)
 
-    fun textModel() = preferenceStore.getString("pref_translation_text_model", TranslationOptions.DEFAULT_TEXT_MODEL)
+    fun textModel(provider: AiProvider = AiProvider.GEMINI) = preferenceStore.getString(
+        "pref_translation_text_model_${provider.id}",
+        if (provider == AiProvider.GEMINI) {
+            preferenceStore.getString("pref_translation_text_model", TranslationOptions.DEFAULT_TEXT_MODEL).get()
+        } else {
+            ""
+        },
+    )
 
     fun translateSfx() = preferenceStore.getBoolean("pref_translation_sfx", false)
 
