@@ -37,7 +37,13 @@ android {
     defaultConfig {
         applicationId = "app.mihon.translate"
 
-        versionCode = 38
+        // GitHub release APKs must have a higher version code to install over an existing build.
+        // Keep local/dev builds on the app's normal version code.
+        versionCode = if (System.getenv("MIHON_GITHUB_RELEASE").toBoolean()) {
+            System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.takeIf { it > 0 } ?: 38
+        } else {
+            38
+        }
         versionName = "0.21.2"
 
         buildConfigField("boolean", "TELEMETRY_INCLUDED", "${Config.includeTelemetry}")
