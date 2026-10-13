@@ -183,6 +183,7 @@ class TranslationNotifier(
         is TranslationException.InvalidApiKey -> context.stringResource(MR.strings.translation_error_invalid_key)
         is TranslationException.QuotaExceeded -> context.stringResource(MR.strings.translation_error_quota)
         is TranslationException.ModelNotFound -> context.stringResource(MR.strings.translation_error_model)
+        is TranslationException.UnsupportedCapability -> context.stringResource(MR.strings.translation_error_model)
         is TranslationException.RequestRejected -> context.stringResource(
             MR.strings.translation_error_request,
             error.detail ?: "HTTP ${error.httpCode}",

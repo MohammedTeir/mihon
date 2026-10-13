@@ -18,6 +18,7 @@ import com.hippo.unifile.UniFile
 import dev.zacsweers.metro.Inject
 import eu.kanade.domain.translation.TranslationOptions
 import eu.kanade.domain.translation.TranslationPreferences
+import eu.kanade.domain.translation.AiProvider
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -124,6 +125,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
     @Volatile private var totalPages: Int = 0
 
+    private var activeProvider: AiProvider = AiProvider.GEMINI
+
     /** The translation log file of this run, created when the first part of the log is written. */
     @Volatile private var logFile: UniFile? = null
 
@@ -141,7 +144,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         val source = sourceManager.get(manga.source) ?: return Result.failure()
         chapterName = chapter.name
 
-        val apiKey = translationPreferences.apiKey().get().trim()
+        activeProvider = AiProvider.fromId(translationPreferences.provider().get())
+        val apiKey = translationPreferences.apiKey(activeProvider).get().trim()
         if (apiKey.isEmpty()) {
             notifier.showError(chapter.id, chapter.name, TranslationException.InvalidApiKey(null), 0, 0)
             return Result.failure()
@@ -366,6 +370,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                     val knownCropBoxes = HashMap<Int, List<TextBox>>()
                                     val request = OverlayRequest(
                                         apiKey = apiKey,
+                                        provider = activeProvider,
+                                        baseUrl = translationPreferences.customBaseUrl().get(),
                                         model = model,
                                         language = language,
                                         delayMillis = delayMillis,
@@ -458,6 +464,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         model,
                                         language,
                                         PromptContext.build(glossary),
+                                        provider = activeProvider,
+                                        baseUrl = translationPreferences.customBaseUrl().get(),
                                     )
                                 }
                                 writePage(stagingDir, index, indexWidth, image)
@@ -677,6 +685,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
     /** Everything one request to the text model needs besides the image. */
     private class OverlayRequest(
         val apiKey: String,
+        val provider: AiProvider,
+        val baseUrl: String,
         val model: String,
         val language: String,
         val delayMillis: Long,
@@ -710,6 +720,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                 request.language,
                 request.delayMillis,
                 request.promptContext,
+                provider = request.provider,
+                baseUrl = request.baseUrl,
                 label = "page $pageNumber crop ${cropIndex + 1}/${uploads.size}",
             )
             detections += cropBoxes.map {

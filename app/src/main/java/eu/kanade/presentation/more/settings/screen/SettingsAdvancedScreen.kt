@@ -23,6 +23,9 @@ import androidx.core.net.toUri
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.translation.AiCapability
+import eu.kanade.domain.translation.AiModelCatalog
+import eu.kanade.domain.translation.AiProvider
 import eu.kanade.domain.translation.TranslationOptions
 import eu.kanade.domain.translation.TranslationPreferences
 import eu.kanade.presentation.more.settings.Preference
@@ -122,7 +125,10 @@ object SettingsAdvancedScreen : SearchableSettings {
             getNetworkGroup(networkPreferences = networkPreferences),
             getLibraryGroup(libraryPreferences = libraryPreferences),
             getReaderGroup(basePreferences = basePreferences),
-            getTranslationGroup(translationPreferences = translationPreferences),
+            getTranslationGroup(
+                translationPreferences = translationPreferences,
+                modelDiscovery = graph.aiModelDiscovery,
+            ),
             getExtensionsGroup(basePreferences = basePreferences),
         )
     }
@@ -351,9 +357,11 @@ object SettingsAdvancedScreen : SearchableSettings {
     @Composable
     private fun getTranslationGroup(
         translationPreferences: TranslationPreferences,
+        modelDiscovery: eu.kanade.tachiyomi.data.translation.AiModelDiscovery,
     ): Preference.PreferenceGroup {
+        val scope = rememberCoroutineScope()
         val enabledPref = remember { translationPreferences.enabled() }
-        val apiKeyPref = remember { translationPreferences.apiKey() }
+        val providerPref = remember { translationPreferences.provider() }
         val modelPref = remember { translationPreferences.model() }
         val targetLanguagePref = remember { translationPreferences.targetLanguage() }
         val modePref = remember { translationPreferences.mode() }
@@ -365,9 +373,30 @@ object SettingsAdvancedScreen : SearchableSettings {
         val placementPref = remember { translationPreferences.placement() }
         val saveLogPref = remember { translationPreferences.saveLog() }
 
-        val apiKey by apiKeyPref.collectAsState()
+        val providerId by providerPref.collectAsState()
         val mode by modePref.collectAsState()
+        val provider = AiProvider.fromId(providerId)
+        val apiKeyPref = remember(provider) { translationPreferences.apiKey(provider) }
+        val customBaseUrlPref = remember { translationPreferences.customBaseUrl() }
+        val catalogPref = remember(provider) { translationPreferences.modelCatalog(provider) }
+        val apiKey by apiKeyPref.collectAsState()
+        val catalogJson by catalogPref.collectAsState()
         val overlay = mode == TranslationOptions.MODE_OVERLAY
+
+        val discoveredModels = remember(catalogJson) { AiModelCatalog.decode(catalogJson) }
+        val modelEntries = remember(discoveredModels, overlay) {
+            val required = if (overlay) {
+                setOf(AiCapability.TEXT_GENERATION, AiCapability.IMAGE_INPUT)
+            } else {
+                setOf(AiCapability.IMAGE_GENERATION)
+            }
+            discoveredModels.filter { required.all(it::supports) }
+                .associate { it.id to "${it.name} (${it.id})" }
+                .ifEmpty {
+                    val selected = if (overlay) textModelPref.get() else modelPref.get()
+                    mapOf(selected to selected)
+                }
+        }
 
         val modeEntries = mapOf(
             TranslationOptions.MODE_REDRAW to stringResource(MR.strings.pref_translation_mode_redraw),
@@ -402,6 +431,22 @@ object SettingsAdvancedScreen : SearchableSettings {
                     ),
                 )
                 add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = providerPref,
+                        entries = AiProvider.entries.associate { it.id to it.displayName },
+                        title = "AI provider",
+                    ),
+                )
+                if (provider == AiProvider.CUSTOM) {
+                    add(
+                        Preference.PreferenceItem.EditTextPreference(
+                            preference = customBaseUrlPref,
+                            title = "Custom API base URL",
+                            subtitle = "%s",
+                        ),
+                    )
+                }
+                add(
                     Preference.PreferenceItem.EditTextPreference(
                         preference = apiKeyPref,
                         title = stringResource(MR.strings.pref_translation_api_key),
@@ -410,6 +455,43 @@ object SettingsAdvancedScreen : SearchableSettings {
                             stringResource(MR.strings.pref_translation_api_key_not_set)
                         } else {
                             stringResource(MR.strings.pref_translation_api_key_set)
+                        },
+                        onValueChanged = { value ->
+                            try {
+                                val models = modelDiscovery.listModels(
+                                    provider,
+                                    value,
+                                    customBaseUrlPref.get().takeIf { provider == AiProvider.CUSTOM },
+                                )
+                                catalogPref.set(AiModelCatalog.encode(models))
+                            } catch (_: Exception) {
+                                // Keep the key saved; the explicit refresh action exposes retryable failures.
+                            }
+                            true
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Refresh available models",
+                        subtitle = if (discoveredModels.isEmpty()) {
+                            "Fetch the models supported by this API key"
+                        } else {
+                            "${discoveredModels.size} model(s) discovered; filtered by capability"
+                        },
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val models = graph.aiModelDiscovery.listModels(
+                                        provider,
+                                        apiKey,
+                                        customBaseUrlPref.get().takeIf { provider == AiProvider.CUSTOM },
+                                    )
+                                    catalogPref.set(AiModelCatalog.encode(models))
+                                } catch (_: Exception) {
+                                    // The key remains usable; users can retry after fixing the endpoint/network.
+                                }
+                            }
                         },
                     ),
                 )
@@ -424,7 +506,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                     add(
                         Preference.PreferenceItem.ListPreference(
                             preference = textModelPref,
-                            entries = TranslationOptions.TEXT_MODELS,
+                            entries = modelEntries,
                             title = stringResource(MR.strings.pref_translation_text_model),
                         ),
                     )
@@ -468,7 +550,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                     add(
                         Preference.PreferenceItem.ListPreference(
                             preference = modelPref,
-                            entries = TranslationOptions.MODELS,
+                            entries = modelEntries,
                             title = stringResource(MR.strings.pref_translation_model),
                         ),
                     )

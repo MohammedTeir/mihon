@@ -29,6 +29,7 @@ import eu.kanade.tachiyomi.data.library.MetadataUpdateWorker
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.translation.TranslationWorker
+import eu.kanade.tachiyomi.data.translation.AiModelDiscovery
 import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
 import eu.kanade.tachiyomi.extension.ExtensionManager
 import eu.kanade.tachiyomi.extension.util.ExtensionInstallActivity
@@ -92,6 +93,7 @@ interface AppGraph : ViewModelGraph {
     val sourcePreferences: SourcePreferences
     val trackPreferences: TrackPreferences
     val translationPreferences: TranslationPreferences
+    val aiModelDiscovery: AiModelDiscovery
     val backupPreferences: BackupPreferences
     val storagePreferences: StoragePreferences
     val privacyPreferences: PrivacyPreferences

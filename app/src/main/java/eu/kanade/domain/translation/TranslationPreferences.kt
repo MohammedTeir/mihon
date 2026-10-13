@@ -11,13 +11,25 @@ import tachiyomi.core.common.preference.PreferenceStore
 class TranslationPreferences(
     private val preferenceStore: PreferenceStore,
 ) {
-
     fun enabled() = preferenceStore.getBoolean("pref_translation_enabled", false)
 
-    // Private key: filtered out of backups by PreferenceBackupCreator.
-    fun apiKey() = preferenceStore.getString(Preference.privateKey("pref_nano_banana_api_key"), "")
+    /** Selected backend. Existing installs default to Gemini. */
+    fun provider() = preferenceStore.getString("pref_translation_provider", AiProvider.GEMINI.id)
 
-    // Language name sent to the model, e.g. "English", "Arabic".
+    /** Private API key storage is intentionally excluded from backups. */
+    fun apiKey(provider: AiProvider = AiProvider.GEMINI) = preferenceStore.getString(
+        Preference.privateKey("pref_translation_api_key_${provider.id}"),
+        if (provider == AiProvider.GEMINI) preferenceStore.getString(LEGACY_KEY, "").get() else "",
+    )
+
+    /** Compatibility accessor used by older callers and migration code. */
+    fun apiKey() = apiKey(AiProvider.GEMINI)
+
+    fun customBaseUrl() = preferenceStore.getString("pref_translation_custom_base_url", "")
+
+    /** JSON-encoded List<AiModel>; not private because it contains no credentials. */
+    fun modelCatalog(provider: AiProvider) = preferenceStore.getString("pref_translation_model_catalog_${provider.id}", "")
+
     fun targetLanguage() = preferenceStore.getString(
         "pref_translation_target_lang",
         TranslationOptions.DEFAULT_LANGUAGE,
@@ -25,30 +37,28 @@ class TranslationPreferences(
 
     fun model() = preferenceStore.getString("pref_translation_model", TranslationOptions.DEFAULT_MODEL)
 
-    // "redraw" (Nano Banana image model, paid) or "overlay" (free text model, text drawn by the app).
     fun mode() = preferenceStore.getString("pref_translation_mode", TranslationOptions.MODE_REDRAW)
 
     fun textModel() = preferenceStore.getString("pref_translation_text_model", TranslationOptions.DEFAULT_TEXT_MODEL)
 
-    // Overlay mode: also translate sound effects (usually looks bad, so off by default).
     fun translateSfx() = preferenceStore.getBoolean("pref_translation_sfx", false)
 
-    // Overlay mode: minimum pause between requests, to stay under free tier rate limits.
-    // Per manga glossary text, one `source = translation` per line. See Glossary.
     fun glossary(mangaId: Long) = preferenceStore.getString("pref_translation_glossary_$mangaId", "")
 
-    // Overlay mode: how the translated text looks (see RenderStyle). Applied when a chapter is translated.
     fun fontStyle() = preferenceStore.getString("pref_translation_font", "bold")
 
     fun textSizePercent() = preferenceStore.getInt("pref_translation_text_size", 100)
 
     fun placement() = preferenceStore.getString("pref_translation_placement", "replace")
 
-    // The Translate dialog's "only while charging and on Wi-Fi" switch, remembered for next time.
     fun onlyWhenIdle() = preferenceStore.getBoolean("pref_translation_only_idle", false)
 
     fun requestDelaySeconds() = preferenceStore.getInt("pref_translation_delay_seconds", 6)
 
-    // Writes a step by step text log of every translated chapter into the Local source folder.
     fun saveLog() = preferenceStore.getBoolean("pref_translation_save_log", true)
+
+    private companion object {
+        // Kept readable so existing users do not lose their Gemini key on upgrade.
+        const val LEGACY_KEY = "pref_nano_banana_api_key"
+    }
 }

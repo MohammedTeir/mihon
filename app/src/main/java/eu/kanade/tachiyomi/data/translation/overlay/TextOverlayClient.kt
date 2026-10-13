@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.translation.overlay
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import eu.kanade.domain.translation.AiProvider
 import eu.kanade.tachiyomi.data.translation.GEMINI_BASE_URL
 import eu.kanade.tachiyomi.data.translation.GenerateContentRequest
 import eu.kanade.tachiyomi.data.translation.GenerationConfig
@@ -23,7 +24,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -65,6 +70,8 @@ class TextOverlayClient(
         language: String,
         baseIntervalMillis: Long,
         promptContext: String = "",
+        provider: AiProvider = AiProvider.GEMINI,
+        baseUrl: String = "",
         label: String = "request",
     ): List<TextBox> {
         if (!isValidApiKey(apiKey)) {
@@ -72,9 +79,11 @@ class TextOverlayClient(
         }
         // An answer that fails to parse usually fails again when the request is identical, so every retry asks with a
         // little more randomness.
-        fun bodyFor(attempt: Int) = json.encodeToString(
-            buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt)),
-        ).toRequestBody(JSON_MEDIA_TYPE)
+        fun bodyFor(attempt: Int) = (if (provider == AiProvider.GEMINI) {
+            json.encodeToString(buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt)))
+        } else {
+            buildOpenAiRequest(model, image, mimeType, language, promptContext, temperatureFor(attempt)).toString()
+        }).toRequestBody(JSON_MEDIA_TYPE)
 
         TranslationLog.step {
             "$label: sending ${image.size / BYTES_PER_KB} KB $mimeType to $model, " +
@@ -87,7 +96,7 @@ class TextOverlayClient(
             pacer.awaitTurn(baseIntervalMillis)
             val sentAt = System.nanoTime()
             try {
-                val boxes = executeOnce(bodyFor(attempt), apiKey, model, label)
+                val boxes = executeOnce(bodyFor(attempt), apiKey, model, provider, baseUrl, label)
                 pacer.onSuccess()
                 TranslationLog.step {
                     "$label: answer after ${millisBetween(sentAt, System.nanoTime())} ms " +
@@ -122,10 +131,27 @@ class TextOverlayClient(
         }
     }
 
-    private suspend fun executeOnce(body: RequestBody, apiKey: String, model: String, label: String): List<TextBox> {
+    private suspend fun executeOnce(
+        body: RequestBody,
+        apiKey: String,
+        model: String,
+        provider: AiProvider,
+        baseUrl: String,
+        label: String,
+    ): List<TextBox> {
+        val endpoint = if (provider == AiProvider.GEMINI) {
+            "$GEMINI_BASE_URL/$model:generateContent"
+        } else {
+            "${(baseUrl.takeIf { provider == AiProvider.CUSTOM && it.isNotBlank() }
+                ?: provider.defaultBaseUrl).orEmpty().trimEnd('/')}/chat/completions"
+        }
         val request = POST(
-            url = "$GEMINI_BASE_URL/$model:generateContent",
-            headers = Headers.headersOf("x-goog-api-key", apiKey.trim()),
+            url = endpoint,
+            headers = if (provider == AiProvider.GEMINI) {
+                Headers.headersOf("x-goog-api-key", apiKey.trim())
+            } else {
+                Headers.headersOf("Authorization", "Bearer ${apiKey.trim()}")
+            },
             body = body,
         )
 
@@ -143,12 +169,30 @@ class TextOverlayClient(
             }
             if (!it.isSuccessful) {
                 TranslationLog.step { "$label: HTTP ${it.code}, ${text.length} characters of answer" }
-                throw NanoBananaResponseParser.parseError(it.code, text, json, it.header("Retry-After"))
+                throw if (provider == AiProvider.GEMINI) {
+                    NanoBananaResponseParser.parseError(it.code, text, json, it.header("Retry-After"))
+                } else {
+                    when (it.code) {
+                        401, 403 -> TranslationException.InvalidApiKey("provider rejected the key")
+                        404 -> TranslationException.ModelNotFound(model)
+                        429 -> TranslationException.RateLimited(null)
+                        in 500..599 -> TranslationException.ServerError(it.code)
+                        else -> TranslationException.RequestRejected(it.code, "provider request failed")
+                    }
+                }
             }
-            return OverlayResponseParser.parse(text, json) { note ->
+            val answer = if (provider == AiProvider.GEMINI) text else extractOpenAiContent(text)
+            return OverlayResponseParser.parse(answer, json) { note ->
                 TranslationLog.step { "$label: $note" }
             }
         }
+    }
+
+    private fun extractOpenAiContent(body: String): String {
+        val content = json.parseToJsonElement(body).jsonObject["choices"]?.jsonArray
+            ?.firstOrNull()?.jsonObject?.get("message")?.jsonObject?.get("content")
+            ?: throw TranslationException.UnreadableAnswer("missing choices[0].message.content")
+        return content.jsonPrimitive.contentOrNull ?: content.toString()
     }
 
     private fun millisBetween(from: Long, to: Long) = (to - from) / NANOS_PER_MILLI
@@ -231,6 +275,73 @@ class TextOverlayClient(
                 }
             }
             putJsonArray("required") { add(kotlinx.serialization.json.JsonPrimitive("boxes")) }
+        }
+
+        private val OPENAI_RESPONSE_SCHEMA: JsonElement = buildJsonObject {
+            put("type", "object")
+            put("additionalProperties", false)
+            putJsonObject("properties") {
+                putJsonObject("boxes") {
+                    put("type", "array")
+                    putJsonObject("items") {
+                        put("type", "object")
+                        put("additionalProperties", false)
+                        putJsonObject("properties") {
+                            putJsonObject("box_2d") {
+                                put("type", "array")
+                                putJsonObject("items") { put("type", "integer") }
+                            }
+                            putJsonObject("kind") { put("type", "string") }
+                            putJsonObject("source_text") { put("type", "string") }
+                            putJsonObject("text") { put("type", "string") }
+                        }
+                        putJsonArray("required") {
+                            add(kotlinx.serialization.json.JsonPrimitive("box_2d"))
+                            add(kotlinx.serialization.json.JsonPrimitive("kind"))
+                            add(kotlinx.serialization.json.JsonPrimitive("source_text"))
+                            add(kotlinx.serialization.json.JsonPrimitive("text"))
+                        }
+                    }
+                }
+            }
+            putJsonArray("required") { add(kotlinx.serialization.json.JsonPrimitive("boxes")) }
+        }
+
+        internal fun buildOpenAiRequest(
+            model: String,
+            image: ByteArray,
+            mimeType: String,
+            language: String,
+            extra: String = "",
+            temperature: Double = DEFAULT_TEMPERATURE,
+        ): JsonElement = buildJsonObject {
+            put("model", model)
+            put("temperature", temperature)
+            putJsonArray("messages") {
+                add(buildJsonObject {
+                    put("role", "user")
+                    putJsonArray("content") {
+                        add(buildJsonObject {
+                            put("type", "text")
+                            put("text", buildPrompt(language, extra))
+                        })
+                        add(buildJsonObject {
+                            put("type", "image_url")
+                            putJsonObject("image_url") {
+                                put("url", "data:$mimeType;base64,${Base64.getEncoder().encodeToString(image)}")
+                            }
+                        })
+                    }
+                })
+            }
+            putJsonObject("response_format") {
+                put("type", "json_schema")
+            putJsonObject("json_schema") {
+                put("name", "translation_boxes")
+                put("strict", true)
+                    put("schema", OPENAI_RESPONSE_SCHEMA)
+                }
+            }
         }
 
         fun buildPrompt(language: String, extra: String = ""): String {

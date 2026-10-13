@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.translation
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.Inject
 import dev.zacsweers.metro.SingleIn
+import eu.kanade.domain.translation.AiProvider
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.await
@@ -51,7 +52,12 @@ class NanoBananaClient(
         model: String,
         language: String,
         promptContext: String = "",
+        provider: AiProvider = AiProvider.GEMINI,
+        baseUrl: String = "",
     ): TranslatedImage {
+        if (provider != AiProvider.GEMINI) {
+            throw TranslationException.UnsupportedCapability("redraw mode currently requires a Gemini image model")
+        }
         if (!isValidApiKey(apiKey)) {
             throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
         }

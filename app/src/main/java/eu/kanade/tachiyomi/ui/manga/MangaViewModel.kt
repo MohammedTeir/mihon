@@ -35,6 +35,7 @@ import eu.kanade.domain.track.interactor.TrackChapter
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.domain.translation.TranslationOptions
+import eu.kanade.domain.translation.AiProvider
 import eu.kanade.domain.translation.TranslationPreferences
 import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.presentation.manga.components.ChapterDownloadAction
@@ -788,7 +789,8 @@ class MangaViewModel(
     fun translateChapter(item: ChapterList.Item) {
         val state = successState ?: return
 
-        if (translationPreferences.apiKey().get().isBlank()) {
+        val provider = AiProvider.fromId(translationPreferences.provider().get())
+        if (translationPreferences.apiKey(provider).get().isBlank()) {
             viewModelScope.launch {
                 snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.translation_api_key_missing))
             }

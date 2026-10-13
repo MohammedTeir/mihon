@@ -32,6 +32,10 @@ sealed class TranslationException(message: String, cause: Throwable? = null) : E
         override val isFatal get() = true
     }
 
+    class UnsupportedCapability(detail: String) : TranslationException("Unsupported provider capability: $detail") {
+        override val isFatal get() = true
+    }
+
     /** Any other 4xx. */
     class RequestRejected(val httpCode: Int, val detail: String?) :
         TranslationException("Request rejected (HTTP $httpCode): ${detail.orEmpty()}") {
