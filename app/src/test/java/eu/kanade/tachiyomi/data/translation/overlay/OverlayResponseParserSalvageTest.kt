@@ -65,7 +65,7 @@ class OverlayResponseParserSalvageTest {
         val boxes = OverlayResponseParser.parseAnswer(answer, json) { notes += it }
 
         assertEquals(listOf("واحد"), boxes.map { it.text })
-        assertTrue(notes.any { it.contains("could not read its text") })
+        assertTrue(notes.any { it.contains("cut off") })
     }
 
     @Test
