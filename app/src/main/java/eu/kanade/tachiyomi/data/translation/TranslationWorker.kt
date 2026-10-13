@@ -16,9 +16,9 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.hippo.unifile.UniFile
 import dev.zacsweers.metro.Inject
+import eu.kanade.domain.translation.AiProvider
 import eu.kanade.domain.translation.TranslationOptions
 import eu.kanade.domain.translation.TranslationPreferences
-import eu.kanade.domain.translation.AiProvider
 import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.notification.Notifications

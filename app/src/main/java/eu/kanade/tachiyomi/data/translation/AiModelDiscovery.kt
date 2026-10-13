@@ -28,14 +28,21 @@ class AiModelDiscovery(
     private val client: OkHttpClient by lazy { buildGeminiHttpClient(networkHelper) }
 
     suspend fun listModels(provider: AiProvider, apiKey: String, baseUrl: String? = null): List<AiModel> {
-        if (!isValidApiKey(apiKey)) throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
+        if (!isValidApiKey(
+                apiKey,
+            )
+        ) {
+            throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
+        }
         if (provider == AiProvider.CUSTOM && baseUrl.isNullOrBlank()) {
             throw TranslationException.RequestRejected(400, "custom endpoint is not configured")
         }
         val endpoint = when (provider) {
             AiProvider.GEMINI -> "https://generativelanguage.googleapis.com/v1beta/models"
             AiProvider.OPENROUTER -> "https://openrouter.ai/api/v1/models"
-            AiProvider.OPENAI, AiProvider.CUSTOM -> "${(baseUrl ?: provider.defaultBaseUrl).orEmpty().trimEnd('/')}/models"
+            AiProvider.OPENAI, AiProvider.CUSTOM -> "${(baseUrl ?: provider.defaultBaseUrl).orEmpty().trimEnd(
+                '/',
+            )}/models"
         }
         val headers = when (provider) {
             AiProvider.GEMINI -> Headers.headersOf("x-goog-api-key", apiKey.trim())
@@ -62,7 +69,9 @@ class AiModelDiscovery(
                 ?.removePrefix("models/")
                 ?: item["id"]?.jsonPrimitive?.contentOrNull
                 ?: return@mapNotNull null
-            val methods = item["supportedGenerationMethods"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
+            val methods = item["supportedGenerationMethods"]?.jsonArray?.mapNotNull {
+                it.jsonPrimitive.contentOrNull
+            }.orEmpty()
             val name = item["displayName"]?.jsonPrimitive?.contentOrNull ?: id
             AiModel(id = id, name = name, capabilities = capabilities(provider, id, methods, item))
         }.distinctBy { it.id }
@@ -83,12 +92,16 @@ class AiModelDiscovery(
             inputModalities.any { it.equals("image", ignoreCase = true) } ||
             lower.contains("vision") || lower.contains("4o") || lower.contains("gemini") || lower.contains("vl")
         val imageOutput = provider.supportsImageGeneration &&
-            (outputModalities.any { it.equals("image", ignoreCase = true) } ||
-                (methods.any { it.contains("generateContent") } && lower.contains("image")))
+            (
+                outputModalities.any { it.equals("image", ignoreCase = true) } ||
+                    (methods.any { it.contains("generateContent") } && lower.contains("image"))
+                )
         return buildSet {
             add(AiCapability.TEXT_GENERATION.name)
             if (imageInput) add(AiCapability.IMAGE_INPUT.name)
-            if (provider == AiProvider.GEMINI || provider == AiProvider.OPENAI || provider == AiProvider.OPENROUTER || provider == AiProvider.CUSTOM) {
+            if (provider == AiProvider.GEMINI || provider == AiProvider.OPENAI || provider == AiProvider.OPENROUTER ||
+                provider == AiProvider.CUSTOM
+            ) {
                 add(AiCapability.JSON_SCHEMA.name)
             }
             if (imageOutput) add(AiCapability.IMAGE_GENERATION.name)

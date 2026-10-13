@@ -34,8 +34,8 @@ import eu.kanade.domain.track.interactor.RefreshTracks
 import eu.kanade.domain.track.interactor.TrackChapter
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.service.TrackPreferences
-import eu.kanade.domain.translation.TranslationOptions
 import eu.kanade.domain.translation.AiProvider
+import eu.kanade.domain.translation.TranslationOptions
 import eu.kanade.domain.translation.TranslationPreferences
 import eu.kanade.presentation.manga.DownloadAction
 import eu.kanade.presentation.manga.components.ChapterDownloadAction

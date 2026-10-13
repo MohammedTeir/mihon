@@ -24,9 +24,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -79,11 +79,13 @@ class TextOverlayClient(
         }
         // An answer that fails to parse usually fails again when the request is identical, so every retry asks with a
         // little more randomness.
-        fun bodyFor(attempt: Int) = (if (provider == AiProvider.GEMINI) {
-            json.encodeToString(buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt)))
-        } else {
-            buildOpenAiRequest(model, image, mimeType, language, promptContext, temperatureFor(attempt)).toString()
-        }).toRequestBody(JSON_MEDIA_TYPE)
+        fun bodyFor(attempt: Int) = (
+            if (provider == AiProvider.GEMINI) {
+                json.encodeToString(buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt)))
+            } else {
+                buildOpenAiRequest(model, image, mimeType, language, promptContext, temperatureFor(attempt)).toString()
+            }
+            ).toRequestBody(JSON_MEDIA_TYPE)
 
         TranslationLog.step {
             "$label: sending ${image.size / BYTES_PER_KB} KB $mimeType to $model, " +
@@ -142,8 +144,10 @@ class TextOverlayClient(
         val endpoint = if (provider == AiProvider.GEMINI) {
             "$GEMINI_BASE_URL/$model:generateContent"
         } else {
-            "${(baseUrl.takeIf { provider == AiProvider.CUSTOM && it.isNotBlank() }
-                ?: provider.defaultBaseUrl).orEmpty().trimEnd('/')}/chat/completions"
+            "${(
+                baseUrl.takeIf { provider == AiProvider.CUSTOM && it.isNotBlank() }
+                    ?: provider.defaultBaseUrl
+                ).orEmpty().trimEnd('/')}/chat/completions"
         }
         val request = POST(
             url = endpoint,
@@ -318,27 +322,33 @@ class TextOverlayClient(
             put("model", model)
             put("temperature", temperature)
             putJsonArray("messages") {
-                add(buildJsonObject {
-                    put("role", "user")
-                    putJsonArray("content") {
-                        add(buildJsonObject {
-                            put("type", "text")
-                            put("text", buildPrompt(language, extra))
-                        })
-                        add(buildJsonObject {
-                            put("type", "image_url")
-                            putJsonObject("image_url") {
-                                put("url", "data:$mimeType;base64,${Base64.getEncoder().encodeToString(image)}")
-                            }
-                        })
-                    }
-                })
+                add(
+                    buildJsonObject {
+                        put("role", "user")
+                        putJsonArray("content") {
+                            add(
+                                buildJsonObject {
+                                    put("type", "text")
+                                    put("text", buildPrompt(language, extra))
+                                },
+                            )
+                            add(
+                                buildJsonObject {
+                                    put("type", "image_url")
+                                    putJsonObject("image_url") {
+                                        put("url", "data:$mimeType;base64,${Base64.getEncoder().encodeToString(image)}")
+                                    }
+                                },
+                            )
+                        }
+                    },
+                )
             }
             putJsonObject("response_format") {
                 put("type", "json_schema")
-            putJsonObject("json_schema") {
-                put("name", "translation_boxes")
-                put("strict", true)
+                putJsonObject("json_schema") {
+                    put("name", "translation_boxes")
+                    put("strict", true)
                     put("schema", OPENAI_RESPONSE_SCHEMA)
                 }
             }

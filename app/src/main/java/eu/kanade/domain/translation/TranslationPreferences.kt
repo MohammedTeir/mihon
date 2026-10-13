@@ -28,7 +28,9 @@ class TranslationPreferences(
     fun customBaseUrl() = preferenceStore.getString("pref_translation_custom_base_url", "")
 
     /** JSON-encoded List<AiModel>; not private because it contains no credentials. */
-    fun modelCatalog(provider: AiProvider) = preferenceStore.getString("pref_translation_model_catalog_${provider.id}", "")
+    fun modelCatalog(
+        provider: AiProvider,
+    ) = preferenceStore.getString("pref_translation_model_catalog_${provider.id}", "")
 
     fun targetLanguage() = preferenceStore.getString(
         "pref_translation_target_lang",
