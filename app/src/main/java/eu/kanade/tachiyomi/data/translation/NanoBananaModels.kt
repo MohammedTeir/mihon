@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.translation
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNames
 
 // region Request
@@ -35,6 +36,8 @@ data class GenerationConfig(
     val responseModalities: List<String>? = null,
     val responseMimeType: String? = null,
     val temperature: Double? = null,
+    /** Constrains the answer to this JSON schema (OpenAPI subset), so the model cannot emit broken JSON. */
+    val responseSchema: JsonElement? = null,
 )
 
 // endregion

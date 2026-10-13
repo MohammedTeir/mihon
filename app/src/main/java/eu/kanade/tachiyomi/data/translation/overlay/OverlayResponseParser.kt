@@ -26,6 +26,7 @@ object OverlayResponseParser {
     )
 
     private const val MAX_DETAIL_LENGTH = 200
+    private const val TAIL_LENGTH = 80
     private const val UNICODE_ESCAPE_LENGTH = 5
     private const val HEX_RADIX = 16
 
@@ -95,6 +96,17 @@ object OverlayResponseParser {
         } catch (e: IllegalArgumentException) {
             // Small models sometimes leave a quote or a control character unescaped inside a translation. One bad
             // character must not cost the whole page, so read the boxes field by field instead.
+            val repaired = repairTruncated(answer.substring(start))?.let {
+                try {
+                    json.parseToJsonElement(it)
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
+            }
+            if (repaired != null) {
+                onDropped("the answer was cut off, closed it and kept the complete boxes")
+                return boxesOf(repaired, json, onDropped)
+            }
             val salvaged = salvageBoxes(answer, onDropped)
             if (salvaged.isNotEmpty()) {
                 onDropped(
@@ -104,10 +116,15 @@ object OverlayResponseParser {
                 return salvaged
             }
             throw TranslationException.UnreadableAnswer(
-                "Invalid JSON: ${e.message.orEmpty().take(MAX_DETAIL_LENGTH)}",
+                "Invalid JSON: ${e.message.orEmpty().take(MAX_DETAIL_LENGTH)} " +
+                    "(answer of ${answer.length} characters, starts \"${answer.take(TAIL_LENGTH)}\", " +
+                    "ends \"${answer.takeLast(TAIL_LENGTH)}\")",
             )
         }
+        return boxesOf(element, json, onDropped)
+    }
 
+    private fun boxesOf(element: JsonElement, json: Json, onDropped: (String) -> Unit): List<TextBox> {
         val array: JsonArray = when (element) {
             is JsonArray -> element
             is JsonObject -> element["boxes"] as? JsonArray
@@ -115,6 +132,40 @@ object OverlayResponseParser {
             else -> throw TranslationException.UnreadableAnswer("Unexpected JSON")
         }
         return array.mapNotNull { toTextBox(it, json, onDropped) }
+    }
+
+    /**
+     * Closes an answer that stops in the middle of a box: everything after the last complete box object is cut away
+     * and the open array and object are closed. Returns null when there is no complete box to keep.
+     */
+    internal fun repairTruncated(answer: String): String? {
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var lastBoxEnd = -1
+        for ((i, c) in answer.withIndex()) {
+            if (inString) {
+                when {
+                    escaped -> escaped = false
+                    c == '\\' -> escaped = true
+                    c == '"' -> inString = false
+                }
+                continue
+            }
+            when (c) {
+                '"' -> inString = true
+                '{', '[' -> depth++
+                '}', ']' -> {
+                    depth--
+                    // Depth 2 after a closing brace is a finished box inside {"boxes":[ ... ]}. Depth 1 is a
+                    // finished box inside a bare array.
+                    if (c == '}' && (depth == 2 || (depth == 1 && answer.trimStart().startsWith("[")))) lastBoxEnd = i
+                }
+            }
+        }
+        if (lastBoxEnd < 0) return null
+        val head = answer.substring(0, lastBoxEnd + 1)
+        return if (head.trimStart().startsWith("[")) "$head]" else "$head]}"
     }
 
     /** Some answers wrap the four numbers once more: `"box_2d":[[ymin,xmin,ymax,xmax]]`. */

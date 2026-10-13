@@ -59,7 +59,7 @@ object PageOverlayRenderer {
     private const val COVER_PADDING_RATIO = 0.03f
 
     /** Lettering lighter than this (0-255) gets a dark cover box. */
-    private const val LIGHT_TEXT_LUMINANCE = 150f
+    private const val LIGHT_TEXT_LUMINANCE = 150
 
     /** No text on a page may be fitted bigger than this multiple of the page's median fitted size. */
     private const val SIZE_CAP_FACTOR = 1.35f
@@ -237,7 +237,7 @@ object PageOverlayRenderer {
         val padding = max(COVER_MIN_PADDING, (box.width * COVER_PADDING_RATIO).toInt())
         val area = box.expandedWithin(padding, padding, page)
         if (area.isEmpty) return
-        val light = region.textColor?.let { luminanceFloat(it) > LIGHT_TEXT_LUMINANCE } ?: false
+        val light = region.textColor?.let { luminance(it) > LIGHT_TEXT_LUMINANCE } ?: false
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = if (light) Color.argb(COVER_ALPHA, 24, 28, 40) else Color.argb(COVER_ALPHA, 255, 255, 255)
             this.style = Paint.Style.FILL
@@ -250,9 +250,6 @@ object PageOverlayRenderer {
         val inner = PixelRect(area.left + inset, area.top + inset, area.right - inset, area.bottom - inset)
         drawFitted(canvas, text, inner, if (light) Color.WHITE else Color.BLACK, outlined = false, imageWidth, style)
     }
-
-    private fun luminanceFloat(color: Int): Float =
-        0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)
 
     /**
      * Leaves the page as it is and puts every translation in a caption box next to its original text. For layouts
@@ -458,10 +455,7 @@ object PageOverlayRenderer {
         return widest
     }
 
-    private fun luminance(color: Int): Int {
-        val r = Color.red(color)
-        val g = Color.green(color)
-        val b = Color.blue(color)
-        return (0.299f * r + 0.587f * g + 0.114f * b).toInt()
-    }
+    /** Perceived brightness of [color] on a 0-255 scale. The only luminance helper of this class. */
+    private fun luminance(color: Int): Int =
+        (0.299f * Color.red(color) + 0.587f * Color.green(color) + 0.114f * Color.blue(color)).toInt()
 }

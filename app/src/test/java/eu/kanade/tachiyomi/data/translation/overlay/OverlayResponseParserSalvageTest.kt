@@ -78,6 +78,50 @@ class OverlayResponseParserSalvageTest {
     }
 
     @Test
+    fun `an answer cut off in the middle of a box keeps the complete boxes`() {
+        val notes = mutableListOf<String>()
+        val answer = "{\"boxes\":[" +
+            "{\"box_2d\":[10,20,50,90],\"kind\":\"bubble\",\"source_text\":\"ONE\",\"text\":\"واحد\"}," +
+            "{\"box_2d\":[100,20,140,90],\"kind\":\"bubble\",\"source_text\":\"TWO\",\"text\":\"اثنان\"}," +
+            "{\"box_2d\":[200,20,240,90],\"kind\":\"bubble\",\"source_text\":\"THR"
+
+        val boxes = OverlayResponseParser.parseAnswer(answer, json) { notes += it }
+
+        assertEquals(listOf("واحد", "اثنان"), boxes.map { it.text })
+        assertTrue(notes.any { it.contains("cut off") })
+    }
+
+    @Test
+    fun `repairing a bare array that is cut off closes the array`() {
+        val repaired = OverlayResponseParser.repairTruncated(
+            "[{\"box_2d\":[1,2,3,4],\"text\":\"a\"},{\"box_2d\":[5,6",
+        )
+
+        assertEquals("[{\"box_2d\":[1,2,3,4],\"text\":\"a\"}]", repaired)
+    }
+
+    @Test
+    fun `braces inside a translation do not fool the repair`() {
+        val repaired = OverlayResponseParser.repairTruncated(
+            "{\"boxes\":[{\"box_2d\":[1,2,3,4],\"text\":\"a } b\"},{\"box_2d\":[5",
+        )
+
+        assertEquals("{\"boxes\":[{\"box_2d\":[1,2,3,4],\"text\":\"a } b\"}]}", repaired)
+    }
+
+    @Test
+    fun `nothing to repair when no box is complete`() {
+        assertEquals(null, OverlayResponseParser.repairTruncated("{\"boxes\":[{\"box_2d\":[1,2"))
+    }
+
+    @Test
+    fun `the request asks for the box schema`() {
+        val request = TextOverlayClient.buildRequest(byteArrayOf(1), "image/jpeg", "Arabic")
+
+        assertEquals(TextOverlayClient.RESPONSE_SCHEMA, request.generationConfig.responseSchema)
+    }
+
+    @Test
     fun `retries ask with more randomness up to a limit`() {
         assertEquals(0.1, TextOverlayClient.temperatureFor(0), 1e-9)
         assertTrue(TextOverlayClient.temperatureFor(1) > TextOverlayClient.temperatureFor(0))

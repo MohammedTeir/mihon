@@ -22,6 +22,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -196,6 +201,38 @@ class TextOverlayClient(
                 "\"kind\":\"bubble\",\"source_text\":\"...\",\"text\":\"...\"}]}\n" +
                 "If the page has no text reply {\"boxes\":[]}."
 
+        /**
+         * Schema sent as `responseSchema`. With it Gemini cannot leave a quote unescaped or cut a string in half,
+         * which was the cause of the "Invalid JSON" failures that repeated on every retry.
+         */
+        internal val RESPONSE_SCHEMA: JsonElement = buildJsonObject {
+            put("type", "OBJECT")
+            putJsonObject("properties") {
+                putJsonObject("boxes") {
+                    put("type", "ARRAY")
+                    putJsonObject("items") {
+                        put("type", "OBJECT")
+                        putJsonObject("properties") {
+                            putJsonObject("box_2d") {
+                                put("type", "ARRAY")
+                                putJsonObject("items") { put("type", "INTEGER") }
+                            }
+                            putJsonObject("kind") { put("type", "STRING") }
+                            putJsonObject("source_text") { put("type", "STRING") }
+                            putJsonObject("text") { put("type", "STRING") }
+                        }
+                        putJsonArray("required") {
+                            add(kotlinx.serialization.json.JsonPrimitive("box_2d"))
+                            add(kotlinx.serialization.json.JsonPrimitive("kind"))
+                            add(kotlinx.serialization.json.JsonPrimitive("source_text"))
+                            add(kotlinx.serialization.json.JsonPrimitive("text"))
+                        }
+                    }
+                }
+            }
+            putJsonArray("required") { add(kotlinx.serialization.json.JsonPrimitive("boxes")) }
+        }
+
         fun buildPrompt(language: String, extra: String = ""): String {
             val prompt = PROMPT_TEMPLATE.replace("{language}", language)
             return if (extra.isBlank()) prompt else "$prompt\n\n$extra"
@@ -224,6 +261,7 @@ class TextOverlayClient(
             generationConfig = GenerationConfig(
                 responseMimeType = "application/json",
                 temperature = temperature,
+                responseSchema = RESPONSE_SCHEMA,
             ),
         )
     }
