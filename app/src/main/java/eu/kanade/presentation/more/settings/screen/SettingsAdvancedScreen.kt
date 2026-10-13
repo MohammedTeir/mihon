@@ -482,7 +482,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                         onClick = {
                             scope.launch {
                                 try {
-                                    val models = graph.aiModelDiscovery.listModels(
+                                    val models = modelDiscovery.listModels(
                                         provider,
                                         apiKey,
                                         customBaseUrlPref.get().takeIf { provider == AiProvider.CUSTOM },
