@@ -83,6 +83,10 @@ object BubbleFinder {
         val maxLetterSide: Int = Int.MAX_VALUE,
         /** A traced area whose mid-tone share is above this is gradient or artwork, not a flat bubble. */
         val maxMidToneShare: Float = 0.15f,
+        /** Gap bridging for dashed outlines, as a share of the shorter side of the text box. */
+        val gapCloseRatio: Float = 0.12f,
+        /** Upper limit in pixels of the gap bridging radius. */
+        val maxGapClose: Int = 10,
     )
 
     /** The part of the page that [find] needs pixels for. */
@@ -95,6 +99,7 @@ object BubbleFinder {
      * @param windowPixels ARGB pixels of [window], row by row (stride = window.width).
      * @param box the text box in page coordinates, already clipped to the page.
      * @param traceBubble whether a filled bubble may be flood-filled and repainted. False keeps erasure glyph-only.
+     * @param image the whole page, so a bubble cut off by the page edge is not mistaken for a leaking fill.
      */
     fun find(
         windowPixels: IntArray,
@@ -102,6 +107,7 @@ object BubbleFinder {
         box: PixelRect,
         config: Config = Config(),
         traceBubble: Boolean = true,
+        image: PixelRect? = null,
     ): BubbleRegion {
         val w = window.width
         val h = window.height
@@ -124,26 +130,87 @@ object BubbleFinder {
             return openText(windowPixels, window, boxInWindow, paddedBox, background, config)
         }
 
+        val sides = OpenSides(
+            top = image != null && window.top <= image.top,
+            bottom = image != null && window.bottom >= image.bottom,
+            left = image != null && window.left <= image.left,
+            right = image != null && window.right >= image.right,
+        )
+        // A bubble with a dashed or broken outline lets a plain flood fill escape, so a second try closes the gaps
+        // of the outline first. The result is still the real bubble shape, not a rectangle.
+        val firstRadius = (min(box.width, box.height) * config.gapCloseRatio).toInt().coerceIn(2, config.maxGapClose)
+        // Radius 0 is the plain fill. Wider gaps need a bigger radius, so it grows until a try does not leak.
+        val radii = listOf(0, firstRadius, firstRadius * 2, config.maxGapClose)
+            .map { it.coerceAtMost(config.maxGapClose) }
+            .distinct()
+        for (radius in radii) {
+            val traced = traceBubble(windowPixels, window, boxInWindow, paddedBox, background, config, sides, radius)
+            if (traced != null) return traced
+        }
+        return openText(windowPixels, window, boxInWindow, paddedBox, background, config)
+    }
+
+    /** True when the filled area has a real amount of pixels outside [box], that is, it found the bubble around it. */
+    private fun reachesBeyond(filled: BooleanArray, w: Int, box: PixelRect): Boolean {
+        var outside = 0
+        for (i in filled.indices) {
+            if (!filled[i]) continue
+            val x = i % w
+            val y = i / w
+            if (x < box.left || x >= box.right || y < box.top || y >= box.bottom) outside++
+        }
+        return outside > 2 * (box.width + box.height)
+    }
+
+    /** Sides of the window that lie on the page edge: a bubble cut by the page edge touches them legitimately. */
+    private class OpenSides(val top: Boolean, val bottom: Boolean, val left: Boolean, val right: Boolean)
+
+    /**
+     * Traces the bubble around [boxInWindow] by flood fill. With [closeRadius] above 0 the outline is thickened by
+     * that many pixels while filling, which bridges gaps in a dashed outline.
+     *
+     * @return the traced bubble, or null when the fill escaped, is not flat, or found nothing to start from.
+     */
+    private fun traceBubble(
+        pixels: IntArray,
+        window: PixelRect,
+        boxInWindow: PixelRect,
+        paddedBox: PixelRect,
+        background: Int,
+        config: Config,
+        sides: OpenSides,
+        closeRadius: Int,
+    ): BubbleRegion? {
+        val w = window.width
+        val h = window.height
         val mask = BooleanArray(w * h)
-        val seeds = collectSeeds(windowPixels, w, boxInWindow, background, config.colorTolerance)
-        floodFill(windowPixels, w, h, seeds, background, config.colorTolerance, mask)
+        val seeds = collectSeeds(pixels, w, boxInWindow, background, config.colorTolerance)
+        if (seeds.isEmpty()) return null
+        if (closeRadius > 0) {
+            floodClosed(pixels, w, h, seeds, background, config.colorTolerance, closeRadius, boxInWindow, mask)
+        } else {
+            floodFill(pixels, w, h, seeds, background, config.colorTolerance, mask)
+        }
         val flooded = mask.copyOf()
+        if (closeRadius > 0 && !reachesBeyond(flooded, w, paddedBox)) {
+            // Thickened letters can wall off every seed. A fill that never left the text box says nothing about the
+            // bubble, and painting the box as a rectangle is exactly what this try is meant to avoid.
+            return null
+        }
         fillRect(mask, w, paddedBox)
         if (config.maxLetterSide != Int.MAX_VALUE) {
             // The model's box often reaches over the bubble outline. Repainting the padded box as a whole would
             // wipe out a piece of the outline (and the page beside it), so take those pixels out again.
-            protectOutline(windowPixels, w, h, mask, flooded, background, config, paddedBox)
+            protectOutline(pixels, w, h, mask, flooded, background, config, paddedBox)
         }
         fillHoles(mask, w, h)
 
         // A real bubble is closed by its outline, so it stays away from the window border. A fill that reaches
-        // the border for a large part of its length has escaped into the page background.
-        val leaked = edgeContact(mask, w, h) > config.maxEdgeContact
-
-        val notFlat = TextEraser.midToneShare(windowPixels, mask, background) > config.maxMidToneShare
-        if (leaked || seeds.isEmpty() || notFlat) {
-            return openText(windowPixels, window, boxInWindow, paddedBox, background, config)
-        }
+        // the border for a large part of its length has escaped into the page background. Sides on the page edge
+        // do not count: a bubble cut off by the page edge reaches them.
+        val leaked = edgeContact(mask, w, h, sides) > config.maxEdgeContact
+        val notFlat = TextEraser.midToneShare(pixels, mask, background) > config.maxMidToneShare
+        if (leaked || notFlat) return null
 
         val inscribed = growInside(mask, w, h, boxInWindow, config.growthCoverage)
         return BubbleRegion(
@@ -418,18 +485,115 @@ object BubbleFinder {
         for (i in mask.indices) if (!mask[i] && !outside[i]) mask[i] = true
     }
 
-    private fun edgeContact(mask: BooleanArray, w: Int, h: Int): Float {
+    private fun edgeContact(mask: BooleanArray, w: Int, h: Int, sides: OpenSides): Float {
         var touching = 0
-        for (x in 0 until w) {
-            if (mask[x]) touching++
-            if (mask[(h - 1) * w + x]) touching++
+        var perimeter = 0
+        if (!sides.top) {
+            perimeter += w
+            for (x in 0 until w) if (mask[x]) touching++
         }
-        for (y in 1 until h - 1) {
-            if (mask[y * w]) touching++
-            if (mask[y * w + w - 1]) touching++
+        if (!sides.bottom) {
+            perimeter += w
+            for (x in 0 until w) if (mask[(h - 1) * w + x]) touching++
         }
-        val perimeter = 2 * (w + h) - 4
+        if (!sides.left) {
+            perimeter += max(0, h - 2)
+            for (y in 1 until h - 1) if (mask[y * w]) touching++
+        }
+        if (!sides.right) {
+            perimeter += max(0, h - 2)
+            for (y in 1 until h - 1) if (mask[y * w + w - 1]) touching++
+        }
         return if (perimeter <= 0) 0f else touching.toFloat() / perimeter
+    }
+
+    /**
+     * Like [floodFill], but ink is thickened by [radius] first so a gap in the outline narrower than twice the
+     * radius cannot be crossed. Afterwards the fill grows back by the same radius over bubble coloured pixels only,
+     * so it reaches the outline again without ever painting over it. Ink inside [box] (the lettering) is ignored.
+     */
+    private fun floodClosed(
+        pixels: IntArray,
+        w: Int,
+        h: Int,
+        seeds: IntArray,
+        background: Int,
+        tolerance: Int,
+        radius: Int,
+        box: PixelRect,
+        mask: BooleanArray,
+    ) {
+        // The lettering inside the text box is not outline. Counting it would wall off the seeds on the box edge.
+        val ink = BooleanArray(w * h) {
+            val x = it % w
+            val y = it / w
+            val inBox = x >= box.left && x < box.right && y >= box.top && y < box.bottom
+            !inBox && !isBackground(pixels[it], background, tolerance)
+        }
+        val barrier = dilate(ink, w, h, radius)
+        val interior = BooleanArray(w * h)
+        val queue = IntArray(w * h)
+        var head = 0
+        var tail = 0
+        for (seed in seeds) {
+            if (!barrier[seed] && !interior[seed]) {
+                interior[seed] = true
+                queue[tail++] = seed
+            }
+        }
+        while (head < tail) {
+            val index = queue[head++]
+            val x = index % w
+            val y = index / w
+            if (x > 0 && !interior[index - 1] && !barrier[index - 1]) {
+                interior[index - 1] = true
+                queue[tail++] = index - 1
+            }
+            if (x < w - 1 && !interior[index + 1] && !barrier[index + 1]) {
+                interior[index + 1] = true
+                queue[tail++] = index + 1
+            }
+            if (y > 0 && !interior[index - w] && !barrier[index - w]) {
+                interior[index - w] = true
+                queue[tail++] = index - w
+            }
+            if (y < h - 1 && !interior[index + w] && !barrier[index + w]) {
+                interior[index + w] = true
+                queue[tail++] = index + w
+            }
+        }
+        val grown = dilate(interior, w, h, radius)
+        for (i in 0 until w * h) mask[i] = interior[i] || (grown[i] && !ink[i])
+    }
+
+    /** Square dilation of [src] by [r] pixels, in two linear passes. */
+    private fun dilate(src: BooleanArray, w: Int, h: Int, r: Int): BooleanArray {
+        if (r <= 0) return src.copyOf()
+        val horizontal = BooleanArray(w * h)
+        for (y in 0 until h) {
+            var count = 0
+            for (x in 0 until min(r, w)) if (src[y * w + x]) count++
+            for (x in 0 until w) {
+                val add = x + r
+                if (add < w && src[y * w + add]) count++
+                val remove = x - r - 1
+                if (remove >= 0 && src[y * w + remove]) count--
+                horizontal[y * w + x] = count > 0
+            }
+        }
+        val out = BooleanArray(w * h)
+        for (x in 0 until w) {
+            var count = 0
+            for (y in 0 until min(r, h)) if (horizontal[y * w + x]) count++
+            for (y in 0 until h) {
+                val add = y + r
+                if (add < h && horizontal[add * w + x]) count++
+                val remove = y - r - 1
+                if (remove >= 0 && horizontal[remove * w + x]) count--
+                out[y * w + x] = count > 0
+            }
+        }
+        return out
     }
 
     // endregion

@@ -30,6 +30,22 @@ class BubbleFinderTest {
             }
         }
 
+        /** Ellipse whose outline is drawn in [segments] pieces, every second piece missing (a dashed bubble). */
+        fun dashedEllipse(cx: Int, cy: Int, rx: Int, ry: Int, outline: Int, segments: Int, outlineWidth: Int = 3) {
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    val outer = sq((x - cx).toDouble() / rx) + sq((y - cy).toDouble() / ry)
+                    val inner = sq((x - cx).toDouble() / (rx - outlineWidth)) +
+                        sq((y - cy).toDouble() / (ry - outlineWidth))
+                    if (outer <= 1.0 && inner > 1.0) {
+                        val angle = Math.atan2((y - cy).toDouble(), (x - cx).toDouble()) + Math.PI
+                        val piece = (angle / (2 * Math.PI) * segments).toInt()
+                        if (piece % 2 == 0) pixels[y * width + x] = outline
+                    }
+                }
+            }
+        }
+
         /** Draws a checkerboard of dark pixels inside [rect], like text strokes. */
         fun text(rect: PixelRect, color: Int) {
             for (y in rect.top until rect.bottom) {
@@ -57,7 +73,7 @@ class BubbleFinderTest {
         traceBubble: Boolean = true,
     ): BubbleRegion {
         val window = BubbleFinder.windowFor(box, page.bounds)
-        return BubbleFinder.find(page.window(window), window, box, config, traceBubble)
+        return BubbleFinder.find(page.window(window), window, box, config, traceBubble, page.bounds)
     }
 
     @Test
@@ -113,6 +129,39 @@ class BubbleFinderTest {
         assertTrue(region.contains(r.right - 1, r.top))
         assertTrue(region.contains(r.left, r.bottom - 1))
         assertTrue(region.contains(r.right - 1, r.bottom - 1))
+    }
+
+    @Test
+    fun `a dashed bubble outline is still traced as the bubble shape`() {
+        val page = Page(240, 220, white)
+        page.dashedEllipse(120, 110, 80, 60, black, segments = 40)
+        val box = PixelRect(85, 90, 155, 130)
+        page.text(PixelRect(88, 93, 152, 127), black)
+
+        val region = find(page, box)
+
+        assertTrue(region.fromFloodFill)
+        // Inside the bubble, away from the text
+        assertTrue(region.contains(120, 58))
+        assertTrue(region.contains(62, 110))
+        // The corners of the bounding rectangle of the bubble lie outside the ellipse and stay untouched
+        assertFalse(region.contains(48, 58))
+        assertFalse(region.contains(192, 162))
+        assertFalse(region.contains(5, 110))
+    }
+
+    @Test
+    fun `a bubble cut off by the page edge is still traced`() {
+        val page = Page(200, 200, 0xFF808080.toInt())
+        page.ellipse(100, 5, 70, 55, white, black)
+        val box = PixelRect(70, 12, 130, 40)
+        page.text(PixelRect(73, 15, 127, 37), black)
+
+        val region = find(page, box)
+
+        assertTrue(region.fromFloodFill)
+        assertTrue(region.contains(100, 2))
+        assertFalse(region.contains(10, 100))
     }
 
     @Test

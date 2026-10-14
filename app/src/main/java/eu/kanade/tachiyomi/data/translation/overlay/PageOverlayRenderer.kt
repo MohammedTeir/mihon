@@ -57,6 +57,10 @@ object PageOverlayRenderer {
     // Fully opaque: at 235 the original English still showed through a white cover box on a white bubble.
     private const val COVER_ALPHA = 255
     private const val COVER_MIN_PADDING = 4
+
+    /** How much wider and taller than the text box the oval cover of an untraced bubble is (per side, share of size). */
+    private const val OVAL_GROWTH = 0.18f
+    private const val OPAQUE = -16777216 // 0xFF000000
     private const val COVER_PADDING_RATIO = 0.03f
 
     /** Lettering lighter than this (0-255) gets a dark cover box. */
@@ -217,7 +221,16 @@ object PageOverlayRenderer {
         }
 
         for (item in covered.sortedBy { it.box.top }) {
-            drawCoverBox(canvas, item.region, item.box, item.text.trim(), imageRect, bitmap.width, style)
+            drawCoverBox(
+                canvas,
+                item.region,
+                item.box,
+                item.text.trim(),
+                imageRect,
+                bitmap.width,
+                style,
+                oval = item.kind == BoxKind.BUBBLE,
+            )
         }
         return Stats(drawn = items.size, covered = covered.size, duplicates = allBoxes.size - boxes.size)
     }
@@ -234,10 +247,37 @@ object PageOverlayRenderer {
         page: PixelRect,
         imageWidth: Int,
         style: RenderStyle,
+        oval: Boolean = false,
     ) {
         val padding = max(COVER_MIN_PADDING, (box.width * COVER_PADDING_RATIO).toInt())
         val area = box.expandedWithin(padding, padding, page)
         if (area.isEmpty) return
+        val inset = padding / 2
+        val inner = PixelRect(area.left + inset, area.top + inset, area.right - inset, area.bottom - inset)
+
+        if (oval) {
+            // A speech bubble that could not be traced is covered by an oval in the bubble's own colour, which is
+            // closer to the original shape than a box. The oval is wider than the text so the corners of the text
+            // stay inside it.
+            val shape = area.expandedWithin(
+                (area.width * OVAL_GROWTH).toInt(),
+                (area.height * OVAL_GROWTH).toInt(),
+                page,
+            )
+            val bubbleColor = region.background or OPAQUE
+            val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = bubbleColor
+                this.style = Paint.Style.FILL
+            }
+            canvas.drawOval(
+                RectF(shape.left.toFloat(), shape.top.toFloat(), shape.right.toFloat(), shape.bottom.toFloat()),
+                fill,
+            )
+            val letters = if (luminance(bubbleColor) < LUMINANCE_DARK_BACKGROUND) Color.WHITE else Color.BLACK
+            drawFitted(canvas, text, inner, letters, outlined = false, imageWidth, style)
+            return
+        }
+
         val light = region.textColor?.let { luminance(it) > LIGHT_TEXT_LUMINANCE } ?: false
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = if (light) Color.argb(COVER_ALPHA, 24, 28, 40) else Color.argb(COVER_ALPHA, 255, 255, 255)
@@ -246,9 +286,6 @@ object PageOverlayRenderer {
         val radius = imageWidth * CAPTION_CORNER_RATIO
         val rect = RectF(area.left.toFloat(), area.top.toFloat(), area.right.toFloat(), area.bottom.toFloat())
         canvas.drawRoundRect(rect, radius, radius, fill)
-
-        val inset = padding / 2
-        val inner = PixelRect(area.left + inset, area.top + inset, area.right - inset, area.bottom - inset)
         drawFitted(canvas, text, inner, if (light) Color.WHITE else Color.BLACK, outlined = false, imageWidth, style)
     }
 
@@ -309,7 +346,7 @@ object PageOverlayRenderer {
         val pixels = IntArray(window.width * window.height)
         bitmap.getPixels(pixels, 0, window.width, window.left, window.top, window.width, window.height)
         val config = BubbleFinder.Config(maxLetterSide = (bitmap.width * MAX_LETTER_SIDE_RATIO).toInt())
-        return BubbleFinder.find(pixels, window, box, config, traceBubble)
+        return BubbleFinder.find(pixels, window, box, config, traceBubble, image)
     }
 
     /** Fills the mask with the bubble colour, one horizontal run at a time. */
