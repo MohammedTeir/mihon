@@ -359,6 +359,7 @@ object SettingsAdvancedScreen : SearchableSettings {
         translationPreferences: TranslationPreferences,
         modelDiscovery: eu.kanade.tachiyomi.data.translation.AiModelDiscovery,
     ): Preference.PreferenceGroup {
+        val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val enabledPref = remember { translationPreferences.enabled() }
         val providerPref = remember { translationPreferences.provider() }
@@ -496,6 +497,29 @@ object SettingsAdvancedScreen : SearchableSettings {
                                     catalogPref.set(AiModelCatalog.encode(models))
                                 } catch (_: Exception) {
                                     // The key remains usable; users can retry after fixing the endpoint/network.
+                                }
+                            }
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = "Test connection",
+                        subtitle = "Check the API key and provider endpoint",
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val models = modelDiscovery.listModels(
+                                        provider,
+                                        apiKey,
+                                        customBaseUrlPref.get().takeIf { provider == AiProvider.CUSTOM },
+                                    )
+                                    catalogPref.set(AiModelCatalog.encode(models))
+                                    context.toast(
+                                        "${provider.displayName} connection successful (${models.size} models found)",
+                                    )
+                                } catch (error: Exception) {
+                                    context.toast("Connection failed: ${error.message ?: "unknown error"}")
                                 }
                             }
                         },
