@@ -130,6 +130,8 @@ object BubbleFinder {
             return openText(windowPixels, window, boxInWindow, paddedBox, background, config)
         }
 
+        // Sides of the window that lie on the page edge. A bubble cut off by the page edge touches such a side over
+        // part of its length, which is no leak; a fill that escaped into the page background covers all of it.
         val sides = OpenSides(
             top = image != null && window.top <= image.top,
             bottom = image != null && window.bottom >= image.bottom,
@@ -488,22 +490,31 @@ object BubbleFinder {
     private fun edgeContact(mask: BooleanArray, w: Int, h: Int, sides: OpenSides): Float {
         var touching = 0
         var perimeter = 0
-        if (!sides.top) {
-            perimeter += w
-            for (x in 0 until w) if (mask[x]) touching++
+
+        fun add(count: Int, length: Int, onPageEdge: Boolean) {
+            if (length <= 0) return
+            // Only part of a page edge side is touched by a bubble that the page edge cuts off.
+            if (onPageEdge && count.toFloat() / length <= PAGE_EDGE_PARTIAL_CONTACT) return
+            touching += count
+            perimeter += length
         }
-        if (!sides.bottom) {
-            perimeter += w
-            for (x in 0 until w) if (mask[(h - 1) * w + x]) touching++
+
+        var top = 0
+        var bottom = 0
+        for (x in 0 until w) {
+            if (mask[x]) top++
+            if (mask[(h - 1) * w + x]) bottom++
         }
-        if (!sides.left) {
-            perimeter += max(0, h - 2)
-            for (y in 1 until h - 1) if (mask[y * w]) touching++
+        var left = 0
+        var right = 0
+        for (y in 1 until h - 1) {
+            if (mask[y * w]) left++
+            if (mask[y * w + w - 1]) right++
         }
-        if (!sides.right) {
-            perimeter += max(0, h - 2)
-            for (y in 1 until h - 1) if (mask[y * w + w - 1]) touching++
-        }
+        add(top, w, sides.top)
+        add(bottom, w, sides.bottom)
+        add(left, max(0, h - 2), sides.left)
+        add(right, max(0, h - 2), sides.right)
         return if (perimeter <= 0) 0f else touching.toFloat() / perimeter
     }
 
@@ -811,6 +822,9 @@ object BubbleFinder {
 
     /** Share of the ring around open text that must have the page colour for the surroundings to count as flat. */
     private const val MIN_FLAT_SHARE = 0.75f
+
+    /** A fill touching more than this share of a page edge side is treated as a leak, not as a cut off bubble. */
+    private const val PAGE_EDGE_PARTIAL_CONTACT = 0.8f
 
     /** A pixel this far from the page colour is clearly visible lettering (matches the eraser's threshold). */
     private const val INK_DISTANCE = 70
