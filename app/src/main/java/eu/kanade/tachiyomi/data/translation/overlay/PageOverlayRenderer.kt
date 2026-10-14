@@ -54,7 +54,8 @@ object PageOverlayRenderer {
     private const val CAPTION_CORNER_RATIO = 0.012f
     private const val CAPTION_PADDING_RATIO = 0.04f
 
-    private const val COVER_ALPHA = 235
+    // Fully opaque: at 235 the original English still showed through a white cover box on a white bubble.
+    private const val COVER_ALPHA = 255
     private const val COVER_MIN_PADDING = 4
     private const val COVER_PADDING_RATIO = 0.03f
 

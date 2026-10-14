@@ -372,6 +372,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                     // Boxes found so far per crop. A second attempt adds to them: the model leaves
                                     // out different bubbles from one request to the next.
                                     val knownCropBoxes = HashMap<Int, List<TextBox>>()
+                                    // Boxes that came from the targeted OCR recovery. They were accepted at a lower
+                                    // coverage bar, so the final check must not hold them to the stricter one again.
+                                    val recoveredCropBoxes = HashMap<Int, List<TextBox>>()
                                     val request = OverlayRequest(
                                         apiKey = apiKey,
                                         provider = activeProvider,
@@ -390,6 +393,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                                 request,
                                                 detections,
                                                 knownCropBoxes,
+                                                recoveredCropBoxes,
                                             )
                                         } catch (e: TranslationException) {
                                             // Keep what the first attempt found instead of losing the page.
@@ -704,6 +708,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
      *
      * @param detections receives every box found, from this and from earlier passes
      * @param knownCropBoxes boxes found so far per crop (in crop coordinates), so a second pass adds to the first
+     * @param recoveredCropBoxes the part of [knownCropBoxes] that targeted recovery added, per crop
      * @return true when text that OCR sees on the page is still not covered
      */
     private suspend fun runOverlayPass(
@@ -712,6 +717,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         request: OverlayRequest,
         detections: MutableList<TallPageCropper.Detection>,
         knownCropBoxes: MutableMap<Int, List<TextBox>>,
+        recoveredCropBoxes: MutableMap<Int, List<TextBox>>,
     ): Boolean {
         var incomplete = false
         var recoveryCalls = 0
@@ -754,14 +760,32 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                 // Boxes an earlier attempt found on this crop count too: the model leaves out different bubbles
                 // from one request to the next, so the attempts add up.
                 val coverageBoxes = (knownCropBoxes[cropIndex].orEmpty() + cropBoxes).toMutableList()
-                val missing = TextCoverage.missingRegions(
-                    textRegions,
-                    coverageBoxes,
-                    coverageBitmap.width,
-                    coverageBitmap.height,
-                    request.translateSfx,
-                    DETECTION_MIN_COVERAGE,
-                )
+                val recoveredBoxes = (recoveredCropBoxes[cropIndex].orEmpty()).toMutableList()
+                // A region counts as covered when the boxes cover it well enough, or when a recovery box that was
+                // accepted for it still sits on it (accepted at the lower bar, then judged at the high bar again,
+                // it was reported as missing in every attempt even though its translation was on the page).
+                fun stillMissing(): List<DetectedTextRegion> {
+                    val missingNow = TextCoverage.missingRegions(
+                        textRegions,
+                        coverageBoxes,
+                        coverageBitmap.width,
+                        coverageBitmap.height,
+                        request.translateSfx,
+                        DETECTION_MIN_COVERAGE,
+                    )
+                    if (recoveredBoxes.isEmpty()) return missingNow
+                    return missingNow.filter { region ->
+                        TextCoverage.missingRegions(
+                            listOf(region),
+                            recoveredBoxes,
+                            coverageBitmap.width,
+                            coverageBitmap.height,
+                            request.translateSfx,
+                            RECOVERY_ACCEPT_COVERAGE,
+                        ).isNotEmpty()
+                    }
+                }
+                val missing = stillMissing()
                 val remainingCalls =
                     (MAX_RECOVERY_CALLS_PER_PAGE - recoveryCalls).coerceAtLeast(0)
                 note {
@@ -835,6 +859,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                         }
                         if (accepted) {
                             coverageBoxes += recoveryBoxes
+                            recoveredBoxes += recoveryBoxes
                             detections += recoveryBoxes.map {
                                 TallPageCropper.Detection(cropUpload.crop, it)
                             }
@@ -849,15 +874,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                     }
                 }
                 knownCropBoxes[cropIndex] = coverageBoxes.toList()
-                if (TextCoverage.missingRegions(
-                        textRegions,
-                        coverageBoxes,
-                        coverageBitmap.width,
-                        coverageBitmap.height,
-                        request.translateSfx,
-                        DETECTION_MIN_COVERAGE,
-                    ).isNotEmpty()
-                ) {
+                recoveredCropBoxes[cropIndex] = recoveredBoxes.toList()
+                if (stillMissing().isNotEmpty()) {
                     incomplete = true
                 }
             } catch (e: CancellationException) {
