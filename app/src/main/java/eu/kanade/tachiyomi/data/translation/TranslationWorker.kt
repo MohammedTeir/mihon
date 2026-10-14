@@ -761,6 +761,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                 // from one request to the next, so the attempts add up.
                 val coverageBoxes = (knownCropBoxes[cropIndex].orEmpty() + cropBoxes).toMutableList()
                 val recoveredBoxes = (recoveredCropBoxes[cropIndex].orEmpty()).toMutableList()
+
                 // A region counts as covered when the boxes cover it well enough, or when a recovery box that was
                 // accepted for it still sits on it (accepted at the lower bar, then judged at the high bar again,
                 // it was reported as missing in every attempt even though its translation was on the page).
