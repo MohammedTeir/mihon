@@ -37,6 +37,11 @@ class TranslationPreferences(
         TranslationOptions.DEFAULT_LANGUAGE,
     )
 
+    fun arabicStyle() = preferenceStore.getString(
+        "pref_translation_arabic_style",
+        TranslationOptions.ARABIC_STYLE_BALADI,
+    )
+
     fun model(provider: AiProvider = AiProvider.GEMINI) = preferenceStore.getString(
         "pref_translation_model_${provider.id}",
         if (provider == AiProvider.GEMINI) {
@@ -46,7 +51,9 @@ class TranslationPreferences(
         },
     )
 
-    fun mode() = preferenceStore.getString("pref_translation_mode", TranslationOptions.MODE_REDRAW)
+    fun mode() = preferenceStore.getString("pref_translation_mode", TranslationOptions.MODE_LOCAL_OCR)
+
+    fun ocrScript() = preferenceStore.getString("pref_translation_ocr_script", TranslationOptions.OCR_SCRIPT_AUTO)
 
     fun textModel(provider: AiProvider = AiProvider.GEMINI) = preferenceStore.getString(
         "pref_translation_text_model_${provider.id}",
@@ -61,7 +68,9 @@ class TranslationPreferences(
 
     fun glossary(mangaId: Long) = preferenceStore.getString("pref_translation_glossary_$mangaId", "")
 
-    fun fontStyle() = preferenceStore.getString("pref_translation_font", "bold")
+    fun fontStyle() = preferenceStore.getString("pref_translation_font", "arabic_manga")
+
+    fun customFontPath() = preferenceStore.getString("pref_translation_custom_font_path", "")
 
     fun textSizePercent() = preferenceStore.getInt("pref_translation_text_size", 100)
 
@@ -72,6 +81,31 @@ class TranslationPreferences(
     fun requestDelaySeconds() = preferenceStore.getInt("pref_translation_delay_seconds", 6)
 
     fun saveLog() = preferenceStore.getBoolean("pref_translation_save_log", true)
+
+    fun autoPreTranslate() = preferenceStore.getBoolean("pref_translation_auto_pre_translate", true)
+
+    fun autoApplyTranslation() = preferenceStore.getBoolean("pref_translation_auto_apply", true)
+
+    fun statsPagesCount() = preferenceStore.getInt("pref_translation_stats_pages", 0)
+
+    fun statsTotalTimeMs() = preferenceStore.getLong("pref_translation_stats_time_ms", 0L)
+
+    fun recordTranslationStats(pages: Int = 1, durationMs: Long) {
+        if (pages <= 0) return
+        statsPagesCount().set(statsPagesCount().get() + pages)
+        statsTotalTimeMs().set(statsTotalTimeMs().get() + durationMs)
+    }
+
+    fun getEstimatedSavedDataMB(): Float {
+        val pages = statsPagesCount().get()
+        return pages * 1.5f
+    }
+
+    fun getAverageLatencySeconds(): Float {
+        val pages = statsPagesCount().get()
+        val totalMs = statsTotalTimeMs().get()
+        return if (pages > 0) (totalMs / pages.toFloat()) / 1000f else 0f
+    }
 
     private companion object {
         // Kept readable so existing users do not lose their Gemini key on upgrade.

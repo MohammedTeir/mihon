@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.data.translation.overlay
 
+import android.content.Context
 import android.graphics.Bitmap
+import com.google.mlkit.common.sdkinternal.MlKitContext
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
@@ -15,9 +17,14 @@ import kotlin.coroutines.suspendCoroutine
 /** Independent, on-device OCR used only to verify whether the image model missed visible text. */
 @Inject
 @SingleIn(AppScope::class)
-class OverlayTextDetector {
+class OverlayTextDetector(
+    private val context: Context,
+) {
 
     private val recognizer: TextRecognizer by lazy {
+        try {
+            MlKitContext.initializeIfNeeded(context)
+        } catch (_: Throwable) {}
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     }
 

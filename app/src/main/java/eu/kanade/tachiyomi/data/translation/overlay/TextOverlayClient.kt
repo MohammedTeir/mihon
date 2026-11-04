@@ -73,6 +73,7 @@ class TextOverlayClient(
         provider: AiProvider = AiProvider.GEMINI,
         baseUrl: String = "",
         label: String = "request",
+        arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
     ): List<TextBox> {
         if (!isValidApiKey(apiKey)) {
             throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
@@ -81,11 +82,11 @@ class TextOverlayClient(
         // little more randomness.
         fun bodyFor(attempt: Int) = (
             if (provider == AiProvider.GEMINI) {
-                json.encodeToString(buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt)))
+                json.encodeToString(buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt), arabicStyle))
             } else if (provider == AiProvider.ANTHROPIC) {
-                buildAnthropicRequest(image, mimeType, language, promptContext, temperatureFor(attempt)).toString()
+                buildAnthropicRequest(image, mimeType, language, promptContext, temperatureFor(attempt), arabicStyle).toString()
             } else {
-                buildOpenAiRequest(model, image, mimeType, language, promptContext, temperatureFor(attempt)).toString()
+                buildOpenAiRequest(model, image, mimeType, language, promptContext, temperatureFor(attempt), arabicStyle).toString()
             }
             ).toRequestBody(JSON_MEDIA_TYPE)
 
@@ -264,6 +265,7 @@ class TextOverlayClient(
                 "stylised onomatopoeia drawn as part of the artwork (impact or sound effects), never for sentences.\n" +
                 "- \"source_text\" is an exact transcription in the original language. \"text\" is its natural, " +
                 "grammatically correct translation into {language}; no notes or invented words.\n" +
+                "- Maintain strict pronoun, gender, and adjective agreement across all dialogue boxes on the page.\n" +
                 "- Proofread every translation before replying: correct spelling and standard grammar, no typos " +
                 "and no invented or misspelled words.\n" +
                 "- Include ALL text, also text outside bubbles on plain backgrounds, stylised, outlined, bold or " +
@@ -347,6 +349,7 @@ class TextOverlayClient(
             language: String,
             extra: String = "",
             temperature: Double = DEFAULT_TEMPERATURE,
+            arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
         ): JsonElement = buildJsonObject {
             put("max_tokens", 4096)
             put("temperature", temperature)
@@ -358,7 +361,7 @@ class TextOverlayClient(
                             add(
                                 buildJsonObject {
                                     put("type", "text")
-                                    put("text", buildPrompt(language, extra))
+                                    put("text", buildPrompt(language, extra, arabicStyle))
                                 },
                             )
                             add(
@@ -384,6 +387,7 @@ class TextOverlayClient(
             language: String,
             extra: String = "",
             temperature: Double = DEFAULT_TEMPERATURE,
+            arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
         ): JsonElement = buildJsonObject {
             put("model", model)
             put("temperature", temperature)
@@ -395,7 +399,7 @@ class TextOverlayClient(
                             add(
                                 buildJsonObject {
                                     put("type", "text")
-                                    put("text", buildPrompt(language, extra))
+                                    put("text", buildPrompt(language, extra, arabicStyle))
                                 },
                             )
                             add(
@@ -420,8 +424,18 @@ class TextOverlayClient(
             }
         }
 
-        fun buildPrompt(language: String, extra: String = ""): String {
-            val prompt = PROMPT_TEMPLATE.replace("{language}", language)
+        fun buildPrompt(
+            language: String,
+            extra: String = "",
+            arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+        ): String {
+            val base = PROMPT_TEMPLATE.replace("{language}", language)
+            val arabicPart = if (eu.kanade.domain.translation.TranslationOptions.isArabic(language)) {
+                "\n\n" + eu.kanade.domain.translation.TranslationOptions.getArabicPromptGuidelines(arabicStyle)
+            } else {
+                ""
+            }
+            val prompt = "$base$arabicPart"
             return if (extra.isBlank()) prompt else "$prompt\n\n$extra"
         }
 
@@ -431,11 +445,12 @@ class TextOverlayClient(
             language: String,
             extra: String = "",
             temperature: Double = DEFAULT_TEMPERATURE,
+            arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
         ) = GenerateContentRequest(
             contents = listOf(
                 RequestContent(
                     parts = listOf(
-                        RequestPart(text = buildPrompt(language, extra)),
+                        RequestPart(text = buildPrompt(language, extra, arabicStyle)),
                         RequestPart(
                             inlineData = RequestInlineData(
                                 mimeType = mimeType,

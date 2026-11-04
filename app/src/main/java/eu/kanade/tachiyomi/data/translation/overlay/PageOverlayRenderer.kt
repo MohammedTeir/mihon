@@ -200,8 +200,8 @@ object PageOverlayRenderer {
         }
         val items = all.filter { it.safe }
         // The original cannot be erased without damaging the page (artwork behind it, stylised lettering). A box
-        // that covers it carries the translation instead. A sound effect is rather left as it is.
-        val covered = all.filter { !it.safe && it.text.isNotBlank() && it.kind != BoxKind.SFX }
+        // that covers it carries the translation instead.
+        val covered = all.filter { !it.safe && it.text.isNotBlank() }
 
         val canvas = Canvas(bitmap)
         val erase = Paint().apply { this.style = Paint.Style.FILL }
@@ -467,19 +467,31 @@ object PageOverlayRenderer {
         canvas.restore()
     }
 
-    private fun typefaceFor(font: RenderStyle.Font): Typeface = when (font) {
-        RenderStyle.Font.BOLD -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        RenderStyle.Font.REGULAR -> Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-        RenderStyle.Font.SERIF -> Typeface.create(Typeface.SERIF, Typeface.NORMAL)
-        // "casual" is Android's handwriting-style family. Scripts it lacks (such as Arabic) use the system font.
-        RenderStyle.Font.COMIC -> Typeface.create("casual", Typeface.BOLD)
+    private fun typefaceFor(font: RenderStyle.Font): Typeface {
+        PageOverlayFontManager.getTypeface(font)?.let { return it }
+        return when (font) {
+            RenderStyle.Font.BOLD -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            RenderStyle.Font.REGULAR -> Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+            RenderStyle.Font.SERIF -> Typeface.create(Typeface.SERIF, Typeface.NORMAL)
+            // "casual" is Android's handwriting-style family. Scripts it lacks (such as Arabic) use the system font.
+            RenderStyle.Font.COMIC -> Typeface.create("casual", Typeface.BOLD)
+            RenderStyle.Font.ARABIC_MANGA -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            RenderStyle.Font.ARABIC_RUQAA -> Typeface.create(Typeface.SERIF, Typeface.BOLD)
+            RenderStyle.Font.CUSTOM -> Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        }
     }
 
     private fun layoutFor(text: String, paint: TextPaint, size: Float, width: Int): StaticLayout {
         paint.textSize = size
+        val isRtl = text.any {
+            val dir = Character.getDirectionality(it)
+            dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT ||
+                dir == Character.DIRECTIONALITY_RIGHT_TO_LEFT_ARABIC
+        }
+        val heuristic = if (isRtl) TextDirectionHeuristics.RTL else TextDirectionHeuristics.FIRSTSTRONG_LTR
         return StaticLayout.Builder.obtain(text, 0, text.length, paint, max(1, width))
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .setTextDirection(TextDirectionHeuristics.FIRSTSTRONG_LTR)
+            .setTextDirection(heuristic)
             .setIncludePad(false)
             .setBreakStrategy(Layout.BREAK_STRATEGY_BALANCED)
             .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)

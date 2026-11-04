@@ -24,6 +24,7 @@ import eu.kanade.tachiyomi.data.download.DownloadProvider
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.translation.context.Glossary
 import eu.kanade.tachiyomi.data.translation.context.PromptContext
+import eu.kanade.tachiyomi.data.translation.ocr.LocalOcrClient
 import eu.kanade.tachiyomi.data.translation.overlay.BoxFilter
 import eu.kanade.tachiyomi.data.translation.overlay.BoxKind
 import eu.kanade.tachiyomi.data.translation.overlay.DetectedTextRegion
@@ -103,6 +104,8 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
     @Inject private lateinit var overlayClient: TextOverlayClient
 
     @Inject private lateinit var overlayTextDetector: OverlayTextDetector
+
+    @Inject private lateinit var localOcrClient: LocalOcrClient
 
     @Inject private lateinit var notifier: TranslationNotifier
 
@@ -232,8 +235,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
 
     private suspend fun translate(chapter: Chapter, manga: Manga, source: Source, apiKey: String): Outcome {
         val language = translationPreferences.targetLanguage().get()
-        val overlay = translationPreferences.mode().get() == TranslationOptions.MODE_OVERLAY
-        val model = if (overlay) {
+        val mode = translationPreferences.mode().get()
+        val isTextMode = mode == TranslationOptions.MODE_OVERLAY || mode == TranslationOptions.MODE_LOCAL_OCR
+        val model = if (isTextMode) {
             translationPreferences.textModel(activeProvider).get()
         } else {
             translationPreferences.model(activeProvider).get()
@@ -250,7 +254,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         val reader = if (chapterDir.isFile) openArchive(chapterDir) else null
         try {
             val pages = listPages(chapterDir, reader)
-            return translatePages(chapter, manga, pages, apiKey, model, language, overlay)
+            return translatePages(chapter, manga, pages, apiKey, model, language, mode)
         } finally {
             reader?.close()
         }
@@ -263,7 +267,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         apiKey: String,
         model: String,
         language: String,
-        overlay: Boolean,
+        mode: String,
     ): Outcome {
         val baseDir = localSourceFileSystem.getBaseDirectory() ?: throw TranslationException.LocalSourceUnavailable()
 
@@ -287,8 +291,10 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         totalPages = pages.size
         donePages.set(finishedPages.size)
 
+        val overlay = mode == TranslationOptions.MODE_OVERLAY
+        val localOcr = mode == TranslationOptions.MODE_LOCAL_OCR
         val remaining = pages.size - finishedPages.size
-        val perPage = if (overlay) ESTIMATED_OVERLAY_BYTES_PER_PAGE else ESTIMATED_BYTES_PER_PAGE
+        val perPage = if (overlay || localOcr) ESTIMATED_OVERLAY_BYTES_PER_PAGE else ESTIMATED_BYTES_PER_PAGE
         val required = remaining * perPage + STORAGE_HEADROOM_BYTES
         val available = DiskUtil.getAvailableStorageSpace(baseDir)
         // `available` is -1 when it cannot be determined (for example some SAF providers). Write errors still
@@ -317,6 +323,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         // Overlay mode is paced by the free tier limits, so pages go one at a time.
         val semaphore = Semaphore(if (overlay) 1 else MAX_PARALLEL_PAGES)
         val translateSfx = translationPreferences.translateSfx().get()
+        eu.kanade.tachiyomi.data.translation.overlay.PageOverlayFontManager.init(context)
+        eu.kanade.tachiyomi.data.translation.overlay.PageOverlayFontManager.customFontPath =
+            translationPreferences.customFontPath().get()
         val style = RenderStyle.from(
             translationPreferences.fontStyle().get(),
             translationPreferences.textSizePercent().get(),
@@ -324,8 +333,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         )
         val delayMillis = translationPreferences.requestDelaySeconds().get().coerceIn(0, 120) * 1000L
         val glossary = Glossary.parse(translationPreferences.glossary(manga.id).get())
+        val arabicStyle = translationPreferences.arabicStyle().get()
         TranslationLog.step {
-            "Settings: mode ${if (overlay) "overlay" else "redraw"}, model $model, language $language, " +
+            "Settings: mode $mode, model $model, language $language, arabicStyle $arabicStyle, " +
                 "translate sound effects $translateSfx, request delay ${delayMillis / MILLIS_PER_SECOND} s, " +
                 "font ${translationPreferences.fontStyle().get()}, " +
                 "text size ${translationPreferences.textSizePercent().get()}%, " +
@@ -356,10 +366,29 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                     "Page ${index + 1}/${pages.size}: read ${bytes.size / BYTES_PER_KB} KB " +
                                         "(${page.mimeType})"
                                 }
-                                val image = if (overlay) {
-                                    val uploads = withContext(Dispatchers.Default) {
-                                        prepareOverlayUploads(bytes, page.mimeType)
+                                val image = when (mode) {
+                                    TranslationOptions.MODE_LOCAL_OCR -> {
+                                        val rendered = withContext(Dispatchers.Default) {
+                                            localOcrClient.translatePageWithLocalOcr(
+                                                image = bytes,
+                                                language = language,
+                                                apiKey = apiKey,
+                                                model = model,
+                                                provider = activeProvider,
+                                                baseUrl = translationPreferences.customBaseUrl().get(),
+                                                ocrScript = translationPreferences.ocrScript().get(),
+                                                promptContext = PromptContext.build(glossary, previousTexts),
+                                                style = style,
+                                                label = "Page ${index + 1}",
+                                                arabicStyle = arabicStyle,
+                                            )
+                                        }
+                                        TranslatedImage(rendered, "image/jpeg")
                                     }
+                                    TranslationOptions.MODE_OVERLAY -> {
+                                        val uploads = withContext(Dispatchers.Default) {
+                                            prepareOverlayUploads(bytes, page.mimeType)
+                                        }
                                     note {
                                         "Page ${index + 1}: " +
                                             "${uploads.first().pageWidth}x${uploads.first().pageHeight} px, " +
@@ -384,6 +413,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         delayMillis = delayMillis,
                                         promptContext = PromptContext.build(glossary, previousTexts),
                                         translateSfx = translateSfx,
+                                        arabicStyle = arabicStyle,
                                     )
                                     for (attempt in 1..MAX_PAGE_ATTEMPTS) {
                                         try {
@@ -461,8 +491,9 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         }
                                         TranslatedImage(rendered.bytes, rendered.mimeType)
                                     }
-                                } else {
-                                    val upload = withContext(Dispatchers.Default) {
+                                }
+                                else -> {
+                                        val upload = withContext(Dispatchers.Default) {
                                         prepareUpload(bytes, page.mimeType)
                                     }
                                     client.translatePage(
@@ -474,8 +505,10 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         PromptContext.build(glossary),
                                         provider = activeProvider,
                                         baseUrl = translationPreferences.customBaseUrl().get(),
+                                        arabicStyle = arabicStyle,
                                     )
                                 }
+                            }
                                 writePage(stagingDir, index, indexWidth, image)
                                 note {
                                     val warning = if (overlay && pageCoverageIncomplete) {
@@ -700,6 +733,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
         val delayMillis: Long,
         val promptContext: String,
         val translateSfx: Boolean,
+        val arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
     )
 
     /**
@@ -733,6 +767,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                 provider = request.provider,
                 baseUrl = request.baseUrl,
                 label = "page $pageNumber crop ${cropIndex + 1}/${uploads.size}",
+                arabicStyle = request.arabicStyle,
             )
             detections += cropBoxes.map {
                 TallPageCropper.Detection(cropUpload.crop, it)
@@ -835,6 +870,7 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                             request.delayMillis,
                             recoveryContext,
                             label = "page $pageNumber recovery at ${region.bounds.left},${region.bounds.top}",
+                            arabicStyle = request.arabicStyle,
                         ).mapNotNull { box ->
                             TextCoverage.clampRecoveryBox(
                                 box,

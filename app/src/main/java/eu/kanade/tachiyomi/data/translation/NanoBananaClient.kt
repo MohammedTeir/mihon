@@ -54,6 +54,7 @@ class NanoBananaClient(
         promptContext: String = "",
         provider: AiProvider = AiProvider.GEMINI,
         baseUrl: String = "",
+        arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
     ): TranslatedImage {
         if (provider != AiProvider.GEMINI) {
             throw TranslationException.UnsupportedCapability("redraw mode currently requires a Gemini image model")
@@ -62,7 +63,7 @@ class NanoBananaClient(
             throw TranslationException.InvalidApiKey("key is empty or contains invalid characters")
         }
 
-        val requestBody = json.encodeToString(buildRequest(image, mimeType, language, promptContext))
+        val requestBody = json.encodeToString(buildRequest(image, mimeType, language, promptContext, arabicStyle))
             .toRequestBody(JSON_MEDIA_TYPE)
 
         var attempt = 0
@@ -121,8 +122,18 @@ class NanoBananaClient(
                 "text, matching the original lettering style and fitting it inside the bubbles. Do not add, " +
                 "remove, crop or redraw any other part of the image. Return the full page as an image."
 
-        fun buildPrompt(language: String, extra: String = ""): String {
-            val prompt = PROMPT_TEMPLATE.replace("{language}", language)
+        fun buildPrompt(
+            language: String,
+            extra: String = "",
+            arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+        ): String {
+            val base = PROMPT_TEMPLATE.replace("{language}", language)
+            val arabicPart = if (eu.kanade.domain.translation.TranslationOptions.isArabic(language)) {
+                "\n\n" + eu.kanade.domain.translation.TranslationOptions.getArabicPromptGuidelines(arabicStyle)
+            } else {
+                ""
+            }
+            val prompt = "$base$arabicPart"
             return if (extra.isBlank()) prompt else "$prompt\n\n$extra"
         }
 
@@ -131,11 +142,12 @@ class NanoBananaClient(
             mimeType: String,
             language: String,
             extra: String = "",
+            arabicStyle: String = eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
         ) = GenerateContentRequest(
             contents = listOf(
                 RequestContent(
                     parts = listOf(
-                        RequestPart(text = buildPrompt(language, extra)),
+                        RequestPart(text = buildPrompt(language, extra, arabicStyle)),
                         RequestPart(
                             inlineData = RequestInlineData(
                                 mimeType = mimeType,

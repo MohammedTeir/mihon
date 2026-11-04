@@ -13,6 +13,9 @@ data class RenderStyle(
         REGULAR("regular"),
         SERIF("serif"),
         COMIC("comic"),
+        ARABIC_MANGA("arabic_manga"),
+        ARABIC_RUQAA("arabic_ruqaa"),
+        CUSTOM("custom"),
         ;
 
         companion object {

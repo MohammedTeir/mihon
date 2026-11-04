@@ -36,4 +36,12 @@ data class PixelRect(val left: Int, val top: Int, val right: Int, val bottom: In
         right.coerceIn(bounds.left, bounds.right),
         bottom.coerceIn(bounds.top, bounds.bottom),
     )
+
+    fun overlapShare(other: PixelRect): Float {
+        val w = max(0, min(right, other.right) - max(left, other.left))
+        val h = max(0, min(bottom, other.bottom) - max(top, other.top))
+        val intersection = w.toLong() * h
+        val smaller = min(area, other.area)
+        return if (smaller <= 0L) 0f else intersection.toFloat() / smaller
+    }
 }
