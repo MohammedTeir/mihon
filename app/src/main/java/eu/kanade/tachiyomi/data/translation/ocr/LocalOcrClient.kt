@@ -99,8 +99,23 @@ class LocalOcrClient(
 
         val mimeType = "image/jpeg"
         val requestBody = when (provider) {
-            AiProvider.GEMINI -> buildGeminiTextRequestBody(blocks, image, mimeType, language, promptContext, arabicStyle)
-            AiProvider.ANTHROPIC -> buildAnthropicTextRequestBody(blocks, image, mimeType, language, promptContext, model, arabicStyle)
+            AiProvider.GEMINI -> buildGeminiTextRequestBody(
+                blocks,
+                image,
+                mimeType,
+                language,
+                promptContext,
+                arabicStyle,
+            )
+            AiProvider.ANTHROPIC -> buildAnthropicTextRequestBody(
+                blocks,
+                image,
+                mimeType,
+                language,
+                promptContext,
+                model,
+                arabicStyle,
+            )
             else -> buildOpenAiTextRequestBody(blocks, image, mimeType, language, promptContext, model, arabicStyle)
         }
 
@@ -258,7 +273,10 @@ class LocalOcrClient(
                                     buildJsonObject {
                                         put("type", "image_url")
                                         putJsonObject("image_url") {
-                                            put("url", "data:$mimeType;base64,${Base64.getEncoder().encodeToString(image)}")
+                                            put(
+                                                "url",
+                                                "data:$mimeType;base64,${Base64.getEncoder().encodeToString(image)}",
+                                            )
                                         }
                                     },
                                 )
@@ -339,7 +357,9 @@ class LocalOcrClient(
             append("You are an expert manga and comic translator translating dialogue bubbles into ")
             append(language)
             append(".\n")
-            append("SCENE CONTINUITY & VISUAL CONTEXT: Look at the manga page image and the dialogue bubbles. Identify who is speaking (look at which character the bubble tail points to) and who they are speaking to (the listener). Maintain character voice, speaker context, and strict pronoun and gender continuity across all bubbles. NEVER confuse the speaker's gender with the listener's gender.\n\n")
+            append(
+                "SCENE CONTINUITY & VISUAL CONTEXT: Look at the manga page image and the dialogue bubbles. Identify who is speaking (look at which character the bubble tail points to) and who they are speaking to (the listener). Maintain character voice, speaker context, and strict pronoun and gender continuity across all bubbles. NEVER confuse the speaker's gender with the listener's gender.\n\n",
+            )
             if (isArabic) {
                 append(eu.kanade.domain.translation.TranslationOptions.getArabicPromptGuidelines(arabicStyle))
                 append("\n")
@@ -354,7 +374,9 @@ class LocalOcrClient(
             append("CRITICAL TRANSLATION INSTRUCTIONS:\n")
             append("1. Translate and return EVERY single item from the input array. Do NOT skip or omit any ID.\n")
             append("2. Output array MUST have the exact same number of items and matching IDs.\n")
-            append("3. Short words, single words, exclamations, reactions, and sound effects (such as 'No', 'Yes', 'Wait', 'Stop', 'Ah', 'Oh', 'Why', 'Huh', 'What', etc.) MUST be translated into ")
+            append(
+                "3. Short words, single words, exclamations, reactions, and sound effects (such as 'No', 'Yes', 'Wait', 'Stop', 'Ah', 'Oh', 'Why', 'Huh', 'What', etc.) MUST be translated into ",
+            )
             append(language)
             append(" - NEVER leave them untranslated.\n")
             append("4. Return ONLY a valid JSON array of objects with 'id' and 'text'.\n")

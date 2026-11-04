@@ -20,14 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import mihon.icons.materialsymbols.MaterialSymbols
-import mihon.icons.materialsymbols.rounded.Check
-import mihon.icons.materialsymbols.rounded.Close
-import mihon.icons.materialsymbols.rounded.Preview
-import mihon.icons.materialsymbols.rounded.Save
-import mihon.icons.materialsymbols.rounded.Share
-import mihon.icons.materialsymbols.roundedfilled.Visibility
-import mihon.icons.materialsymbols.roundedfilled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -48,14 +40,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import eu.kanade.tachiyomi.R
+import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.rounded.Check
+import mihon.icons.materialsymbols.rounded.Close
+import mihon.icons.materialsymbols.rounded.Preview
+import mihon.icons.materialsymbols.rounded.Save
+import mihon.icons.materialsymbols.rounded.Share
+import mihon.icons.materialsymbols.roundedfilled.Visibility
+import mihon.icons.materialsymbols.roundedfilled.VisibilityOff
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 
@@ -193,7 +193,11 @@ fun LiveTranslationDialog(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Icon(
-                                imageVector = if (showOriginal) MaterialSymbols.RoundedFilled.VisibilityOff else MaterialSymbols.RoundedFilled.Visibility,
+                                imageVector = if (showOriginal) {
+                                    MaterialSymbols.RoundedFilled.VisibilityOff
+                                } else {
+                                    MaterialSymbols.RoundedFilled.Visibility
+                                },
                                 contentDescription = null,
                                 tint = Color.White,
                                 modifier = Modifier.size(16.dp),

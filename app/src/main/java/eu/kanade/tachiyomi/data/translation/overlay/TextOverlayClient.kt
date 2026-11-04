@@ -82,11 +82,28 @@ class TextOverlayClient(
         // little more randomness.
         fun bodyFor(attempt: Int) = (
             if (provider == AiProvider.GEMINI) {
-                json.encodeToString(buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt), arabicStyle))
+                json.encodeToString(
+                    buildRequest(image, mimeType, language, promptContext, temperatureFor(attempt), arabicStyle),
+                )
             } else if (provider == AiProvider.ANTHROPIC) {
-                buildAnthropicRequest(image, mimeType, language, promptContext, temperatureFor(attempt), arabicStyle).toString()
+                buildAnthropicRequest(
+                    image,
+                    mimeType,
+                    language,
+                    promptContext,
+                    temperatureFor(attempt),
+                    arabicStyle,
+                ).toString()
             } else {
-                buildOpenAiRequest(model, image, mimeType, language, promptContext, temperatureFor(attempt), arabicStyle).toString()
+                buildOpenAiRequest(
+                    model,
+                    image,
+                    mimeType,
+                    language,
+                    promptContext,
+                    temperatureFor(attempt),
+                    arabicStyle,
+                ).toString()
             }
             ).toRequestBody(JSON_MEDIA_TYPE)
 

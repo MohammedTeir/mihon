@@ -1,3 +1,5 @@
+@file:Suppress("ktlint:standard:max-line-length")
+
 package eu.kanade.tachiyomi.data.translation
 
 import android.content.Context
@@ -389,126 +391,132 @@ class TranslationWorker(private val context: Context, workerParams: WorkerParame
                                         val uploads = withContext(Dispatchers.Default) {
                                             prepareOverlayUploads(bytes, page.mimeType)
                                         }
-                                    note {
-                                        "Page ${index + 1}: " +
-                                            "${uploads.first().pageWidth}x${uploads.first().pageHeight} px, " +
-                                            "${uploads.size} request image(s) " +
-                                            uploads.joinToString(prefix = "(", postfix = ")") {
-                                                "${it.crop.top}-${it.crop.bottom}"
-                                            }
-                                    }
-                                    val detections = mutableListOf<TallPageCropper.Detection>()
-                                    // Boxes found so far per crop. A second attempt adds to them: the model leaves
-                                    // out different bubbles from one request to the next.
-                                    val knownCropBoxes = HashMap<Int, List<TextBox>>()
-                                    // Boxes that came from the targeted OCR recovery. They were accepted at a lower
-                                    // coverage bar, so the final check must not hold them to the stricter one again.
-                                    val recoveredCropBoxes = HashMap<Int, List<TextBox>>()
-                                    val request = OverlayRequest(
-                                        apiKey = apiKey,
-                                        provider = activeProvider,
-                                        baseUrl = translationPreferences.customBaseUrl().get(),
-                                        model = model,
-                                        language = language,
-                                        delayMillis = delayMillis,
-                                        promptContext = PromptContext.build(glossary, previousTexts),
-                                        translateSfx = translateSfx,
-                                        arabicStyle = arabicStyle,
-                                    )
-                                    for (attempt in 1..MAX_PAGE_ATTEMPTS) {
-                                        try {
-                                            pageCoverageIncomplete = runOverlayPass(
-                                                index + 1,
-                                                uploads,
-                                                request,
-                                                detections,
-                                                knownCropBoxes,
-                                                recoveredCropBoxes,
-                                            )
-                                        } catch (e: TranslationException) {
-                                            // Keep what the first attempt found instead of losing the page.
-                                            if (attempt == 1) throw e
-                                            logcat(LogPriority.WARN, e) { "Page ${index + 1}: second attempt failed" }
-                                            pageCoverageIncomplete = true
-                                        }
-                                        if (!pageCoverageIncomplete || stopEarly.get()) break
                                         note {
-                                            "Page ${index + 1}: coverage incomplete after attempt $attempt of " +
-                                                "$MAX_PAGE_ATTEMPTS"
+                                            "Page ${index + 1}: " +
+                                                "${uploads.first().pageWidth}x${uploads.first().pageHeight} px, " +
+                                                "${uploads.size} request image(s) " +
+                                                uploads.joinToString(prefix = "(", postfix = ")") {
+                                                    "${it.crop.top}-${it.crop.bottom}"
+                                                }
                                         }
-                                    }
+                                        val detections = mutableListOf<TallPageCropper.Detection>()
+                                        // Boxes found so far per crop. A second attempt adds to them: the model leaves
+                                        // out different bubbles from one request to the next.
+                                        val knownCropBoxes = HashMap<Int, List<TextBox>>()
+                                        // Boxes that came from the targeted OCR recovery. They were accepted at a lower
+                                        // coverage bar, so the final check must not hold them to the stricter one again.
+                                        val recoveredCropBoxes = HashMap<Int, List<TextBox>>()
+                                        val request = OverlayRequest(
+                                            apiKey = apiKey,
+                                            provider = activeProvider,
+                                            baseUrl = translationPreferences.customBaseUrl().get(),
+                                            model = model,
+                                            language = language,
+                                            delayMillis = delayMillis,
+                                            promptContext = PromptContext.build(glossary, previousTexts),
+                                            translateSfx = translateSfx,
+                                            arabicStyle = arabicStyle,
+                                        )
+                                        for (attempt in 1..MAX_PAGE_ATTEMPTS) {
+                                            try {
+                                                pageCoverageIncomplete = runOverlayPass(
+                                                    index + 1,
+                                                    uploads,
+                                                    request,
+                                                    detections,
+                                                    knownCropBoxes,
+                                                    recoveredCropBoxes,
+                                                )
+                                            } catch (e: TranslationException) {
+                                                // Keep what the first attempt found instead of losing the page.
+                                                if (attempt == 1) throw e
+                                                logcat(LogPriority.WARN, e) {
+                                                    "Page ${index + 1}: second attempt failed"
+                                                }
+                                                pageCoverageIncomplete = true
+                                            }
+                                            if (!pageCoverageIncomplete) break
+                                            if (stopEarly.get()) break
+                                            note {
+                                                "Page ${index + 1}: coverage incomplete after attempt $attempt of " +
+                                                    "$MAX_PAGE_ATTEMPTS"
+                                            }
+                                        }
 
-                                    val firstUpload = uploads.first()
-                                    val merged = TallPageCropper.mapAndDeduplicate(
-                                        detections,
-                                        firstUpload.pageWidth,
-                                        firstUpload.pageHeight,
-                                    )
-                                    // Logos and watermarks in another script than the page are not translated.
-                                    val allBoxes = BoxFilter.withoutScriptOutliers(merged)
-                                    if (allBoxes.size != merged.size) {
-                                        note {
-                                            "Page ${index + 1}: ignored ${merged.size - allBoxes.size} box(es) " +
-                                                "in a different script than the rest of the page (logo or watermark)"
-                                        }
-                                    }
-                                    previousTexts = allBoxes.map { it.text }
-                                    note {
-                                        "Page ${index + 1}: ${detections.size} detection(s) merged into " +
-                                            "${allBoxes.size} box(es) on the page"
-                                    }
-                                    allBoxes.forEachIndexed { boxIndex, box ->
-                                        TranslationLog.step {
-                                            val area = box.toPixelRect(firstUpload.pageWidth, firstUpload.pageHeight)
-                                            "Page ${index + 1} box #${boxIndex + 1} " +
-                                                "[${area.left},${area.top},${area.right},${area.bottom}] " +
-                                                TranslationLog.describe(box)
-                                        }
-                                    }
-                                    val boxes = allBoxes.filter { translateSfx || it.kind != BoxKind.SFX }
-                                    if (boxes.size != allBoxes.size) {
-                                        note {
-                                            "Page ${index + 1}: ${allBoxes.size - boxes.size} sound effect box(es) " +
-                                                "left as they are because sound effects are off"
-                                        }
-                                    }
-                                    if (boxes.isEmpty()) {
-                                        // Nothing to translate: keep the page as it is.
-                                        note { "Page ${index + 1}: nothing to translate, the page is kept as it is" }
-                                        TranslatedImage(bytes, page.mimeType)
-                                    } else {
-                                        val rendered = withContext(Dispatchers.Default) {
-                                            PageOverlayRenderer.render(bytes, boxes, style) { message ->
-                                                TranslationLog.step { "Page ${index + 1} render: $message" }
+                                        val firstUpload = uploads.first()
+                                        val merged = TallPageCropper.mapAndDeduplicate(
+                                            detections,
+                                            firstUpload.pageWidth,
+                                            firstUpload.pageHeight,
+                                        )
+                                        // Logos and watermarks in another script than the page are not translated.
+                                        val allBoxes = BoxFilter.withoutScriptOutliers(merged)
+                                        if (allBoxes.size != merged.size) {
+                                            note {
+                                                "Page ${index + 1}: ignored ${merged.size - allBoxes.size} box(es) " +
+                                                    "in a different script than the rest of the page (logo or watermark)"
                                             }
                                         }
+                                        previousTexts = allBoxes.map { it.text }
                                         note {
-                                            "Page ${index + 1}: ${detections.size} detection(s) became " +
-                                                "${boxes.size} box(es); lettered ${rendered.drawn}, " +
-                                                "covered with a box ${rendered.covered}, " +
-                                                "duplicates dropped ${rendered.duplicates}, " +
-                                                "coverage incomplete: $pageCoverageIncomplete"
+                                            "Page ${index + 1}: ${detections.size} detection(s) merged into " +
+                                                "${allBoxes.size} box(es) on the page"
                                         }
-                                        TranslatedImage(rendered.bytes, rendered.mimeType)
+                                        allBoxes.forEachIndexed { boxIndex, box ->
+                                            TranslationLog.step {
+                                                val area = box.toPixelRect(
+                                                    firstUpload.pageWidth,
+                                                    firstUpload.pageHeight,
+                                                )
+                                                "Page ${index + 1} box #${boxIndex + 1} " +
+                                                    "[${area.left},${area.top},${area.right},${area.bottom}] " +
+                                                    TranslationLog.describe(box)
+                                            }
+                                        }
+                                        val boxes = allBoxes.filter { translateSfx || it.kind != BoxKind.SFX }
+                                        if (boxes.size != allBoxes.size) {
+                                            note {
+                                                "Page ${index + 1}: ${allBoxes.size - boxes.size} sound effect box(es) " +
+                                                    "left as they are because sound effects are off"
+                                            }
+                                        }
+                                        if (boxes.isEmpty()) {
+                                            // Nothing to translate: keep the page as it is.
+                                            note { "No boxes to translate on page ${index + 1}" }
+                                            TranslatedImage(bytes, page.mimeType)
+                                        } else {
+                                            val rendered = withContext(Dispatchers.Default) {
+                                                PageOverlayRenderer.render(bytes, boxes, style) { message ->
+                                                    TranslationLog.step { "Page ${index + 1} render: $message" }
+                                                }
+                                            }
+                                            note {
+                                                "Page ${index + 1}: ${detections.size} detection(s) became " +
+                                                    "${boxes.size} box(es); lettered ${rendered.drawn}, " +
+                                                    "covered with a box ${rendered.covered}, " +
+                                                    "duplicates dropped ${rendered.duplicates}, " +
+                                                    "coverage incomplete: $pageCoverageIncomplete"
+                                            }
+                                            TranslatedImage(rendered.bytes, rendered.mimeType)
+                                        }
                                     }
-                                }
-                                else -> {
+                                    else -> {
                                         val upload = withContext(Dispatchers.Default) {
-                                        prepareUpload(bytes, page.mimeType)
+                                            prepareUpload(bytes, page.mimeType)
+                                        }
+                                        client.translatePage(
+                                            upload.bytes,
+                                            upload.mimeType,
+                                            apiKey,
+                                            model,
+                                            language,
+                                            PromptContext.build(glossary),
+                                            provider = activeProvider,
+                                            baseUrl = translationPreferences.customBaseUrl().get(),
+                                            arabicStyle = arabicStyle,
+                                        )
                                     }
-                                    client.translatePage(
-                                        upload.bytes,
-                                        upload.mimeType,
-                                        apiKey,
-                                        model,
-                                        language,
-                                        PromptContext.build(glossary),
-                                        provider = activeProvider,
-                                        baseUrl = translationPreferences.customBaseUrl().get(),
-                                        arabicStyle = arabicStyle,
-                                    )
                                 }
-                            }
                                 writePage(stagingDir, index, indexWidth, image)
                                 note {
                                     val warning = if (overlay && pageCoverageIncomplete) {

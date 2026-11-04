@@ -30,7 +30,13 @@ object TranslatedPageCache {
 
     private const val CACHE_VERSION = "v4"
 
-    private fun buildKey(mangaId: Long, chapterId: Long, pageIndex: Int, language: String, arabicStyle: String = ""): String {
+    private fun buildKey(
+        mangaId: Long,
+        chapterId: Long,
+        pageIndex: Int,
+        language: String,
+        arabicStyle: String = "",
+    ): String {
         val stylePart = if (arabicStyle.isNotBlank()) "_$arabicStyle" else ""
         return "${CACHE_VERSION}_${mangaId}_${chapterId}_${pageIndex}_$language$stylePart"
     }
@@ -57,7 +63,14 @@ object TranslatedPageCache {
         return null
     }
 
-    fun put(mangaId: Long, chapterId: Long, pageIndex: Int, language: String, bytes: ByteArray, arabicStyle: String = "") {
+    fun put(
+        mangaId: Long,
+        chapterId: Long,
+        pageIndex: Int,
+        language: String,
+        bytes: ByteArray,
+        arabicStyle: String = "",
+    ) {
         val key = buildKey(mangaId, chapterId, pageIndex, language, arabicStyle)
         memoryCache.put(key, bytes)
 

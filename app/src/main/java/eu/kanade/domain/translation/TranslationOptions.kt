@@ -74,8 +74,8 @@ object TranslationOptions {
 
     fun isArabic(language: String): Boolean =
         language.equals("Arabic", ignoreCase = true) ||
-        language.contains("ar", ignoreCase = true) ||
-        language.contains("عرب", ignoreCase = true)
+            language.contains("ar", ignoreCase = true) ||
+            language.contains("عرب", ignoreCase = true)
 
     fun getArabicPromptGuidelines(arabicStyle: String): String {
         return when (arabicStyle) {
@@ -146,7 +146,7 @@ STRICT PRONOUN & GENDER AGREEMENT RULES (قواعد تطابق الضمائر و
    * 'Check this out' -> 'شوف هالشغلة! / اتفرج!'
 - Dialogue must feel authentic, emotional, and punchy, like professional manga and anime dubbed into modern colloquial Arabic.
 - Narration, inner thoughts, and game/system caption boxes should use clean, smooth simplified Arabic with consistent grammar.
-""".trimIndent()
+            """.trimIndent()
             ARABIC_STYLE_MODERN -> """
 CRITICAL TRANSLATION GUIDELINES (فصحى معاصرة مبسطة وسلسة):
 - Translate into modern, fluent, and simplified Standard Arabic (فصحى معاصرة وسلسة).
@@ -167,7 +167,7 @@ CRITICAL TRANSLATION GUIDELINES (فصحى معاصرة مبسطة وسلسة):
        * "While I was on my way out" -> "بينما كنتُ في طريقي للخروج / وأنا خارج".
   4. NATURAL EXPRESSIONS:
      * Never translate idioms word-for-word literally. Keep the flow natural, grammatical, and expressive.
-""".trimIndent()
+            """.trimIndent()
             ARABIC_STYLE_CLASSIC -> """
 CRITICAL TRANSLATION GUIDELINES (فصحى فصيحة أدبية راقية ورصينة):
 - Translate into eloquent, formal Classical Literary Arabic (فصحى أدبية بليغة ورفيعة المستوى تليق بأرقى الروايات والقصص المصورة).
@@ -214,7 +214,7 @@ CRITICAL TRANSLATION GUIDELINES (فصحى فصيحة أدبية راقية ور�
      * 'Shut up' -> 'اصمت! / اخرس!'.
      * 'Never mind' -> 'لا عليك / انسَ الأمر'.
 - اجعل الحوار بليغاً، فصيحاً، متقناً أدبياً ونحوياً، يفيض بالحيوية والمشاعر مثل روائع المانجا والروايات الأدبية الرفيعة.
-""".trimIndent()
+            """.trimIndent()
             else -> ""
         }
     }

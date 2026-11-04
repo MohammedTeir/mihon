@@ -25,13 +25,12 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import tachiyomi.presentation.core.components.material.padding
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.core.net.toUri
@@ -76,10 +75,11 @@ import okhttp3.Headers
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
-import tachiyomi.core.common.i18n.stringResource as getContextString
+import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import java.io.File
+import tachiyomi.core.common.i18n.stringResource as getContextString
 
 object SettingsAdvancedScreen : SearchableSettings {
 
@@ -407,9 +407,15 @@ object SettingsAdvancedScreen : SearchableSettings {
                             destFile.outputStream().use { output -> input.copyTo(output) }
                         }
                         customFontPathPref.set(destFile.absolutePath)
-                        eu.kanade.tachiyomi.data.translation.overlay.PageOverlayFontManager.customFontPath = destFile.absolutePath
+                        eu.kanade.tachiyomi.data.translation.overlay.PageOverlayFontManager.customFontPath =
+                            destFile.absolutePath
                         withContext(Dispatchers.Main) {
-                            context.toast(context.getContextString(MR.strings.pref_translation_custom_font_selected, destFile.name))
+                            context.toast(
+                                context.getContextString(
+                                    MR.strings.pref_translation_custom_font_selected,
+                                    destFile.name,
+                                ),
+                            )
                         }
                     } catch (e: Exception) {
                         withContext(Dispatchers.Main) {
@@ -492,7 +498,9 @@ object SettingsAdvancedScreen : SearchableSettings {
                                 translationPreferences = translationPreferences,
                                 onClearCache = {
                                     eu.kanade.tachiyomi.data.translation.TranslatedPageCache.clearAll()
-                                    context.toast(context.getContextString(MR.strings.pref_translation_clear_cache_done))
+                                    context.toast(
+                                        context.getContextString(MR.strings.pref_translation_clear_cache_done),
+                                    )
                                 },
                             )
                         },
@@ -725,9 +733,12 @@ object SettingsAdvancedScreen : SearchableSettings {
                         Preference.PreferenceItem.ListPreference(
                             preference = arabicStylePref,
                             entries = mapOf(
-                                TranslationOptions.ARABIC_STYLE_BALADI to stringResource(MR.strings.translation_arabic_style_baladi),
-                                TranslationOptions.ARABIC_STYLE_MODERN to stringResource(MR.strings.translation_arabic_style_modern),
-                                TranslationOptions.ARABIC_STYLE_CLASSIC to stringResource(MR.strings.translation_arabic_style_classic),
+                                TranslationOptions.ARABIC_STYLE_BALADI to
+                                    stringResource(MR.strings.translation_arabic_style_baladi),
+                                TranslationOptions.ARABIC_STYLE_MODERN to
+                                    stringResource(MR.strings.translation_arabic_style_modern),
+                                TranslationOptions.ARABIC_STYLE_CLASSIC to
+                                    stringResource(MR.strings.translation_arabic_style_classic),
                             ),
                             title = stringResource(MR.strings.pref_translation_arabic_style),
                         ),
@@ -860,8 +871,14 @@ private fun TranslationDashboardCard(
 
     val savedDataMb = remember(pagesCount) { translationPreferences.getEstimatedSavedDataMB() }
     val avgLatency = remember(pagesCount, totalMs) { translationPreferences.getAverageLatencySeconds() }
-    val diskCacheMb = remember(pagesCount, cacheVersion) { eu.kanade.tachiyomi.data.translation.TranslatedPageCache.getDiskCacheSizeMB() }
-    val cachedCount = remember(pagesCount, cacheVersion) { eu.kanade.tachiyomi.data.translation.TranslatedPageCache.getCachedPagesCount() }
+    val diskCacheMb =
+        remember(pagesCount, cacheVersion) {
+            eu.kanade.tachiyomi.data.translation.TranslatedPageCache.getDiskCacheSizeMB()
+        }
+    val cachedCount =
+        remember(pagesCount, cacheVersion) {
+            eu.kanade.tachiyomi.data.translation.TranslatedPageCache.getCachedPagesCount()
+        }
 
     ElevatedCard(
         modifier = Modifier

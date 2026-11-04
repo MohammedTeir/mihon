@@ -25,11 +25,11 @@ import eu.kanade.domain.manga.model.readingMode
 import eu.kanade.domain.source.interactor.GetIncognitoState
 import eu.kanade.domain.track.interactor.TrackChapter
 import eu.kanade.domain.track.service.TrackPreferences
-import eu.kanade.tachiyomi.data.cache.ChapterCache
-import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.domain.translation.AiProvider
 import eu.kanade.domain.translation.TranslationOptions
 import eu.kanade.domain.translation.TranslationPreferences
+import eu.kanade.tachiyomi.data.cache.ChapterCache
+import eu.kanade.tachiyomi.data.cache.CoverCache
 import eu.kanade.tachiyomi.data.download.DownloadCache
 import eu.kanade.tachiyomi.data.download.DownloadManager
 import eu.kanade.tachiyomi.data.download.DownloadProvider
@@ -38,19 +38,15 @@ import eu.kanade.tachiyomi.data.saver.Image
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.saver.Location
 import eu.kanade.tachiyomi.data.translation.NanoBananaClient
-import eu.kanade.tachiyomi.data.translation.context.Glossary
-import eu.kanade.tachiyomi.data.translation.context.PromptContext
 import eu.kanade.tachiyomi.data.translation.TranslatedPageCache
 import eu.kanade.tachiyomi.data.translation.TranslationException
+import eu.kanade.tachiyomi.data.translation.context.Glossary
+import eu.kanade.tachiyomi.data.translation.context.PromptContext
 import eu.kanade.tachiyomi.data.translation.ocr.LocalOcrClient
 import eu.kanade.tachiyomi.data.translation.overlay.PageOverlayFontManager
 import eu.kanade.tachiyomi.data.translation.overlay.PageOverlayRenderer
 import eu.kanade.tachiyomi.data.translation.overlay.RenderStyle
 import eu.kanade.tachiyomi.data.translation.overlay.TextOverlayClient
-import tachiyomi.core.common.i18n.stringResource
-import tachiyomi.i18n.MR
-import java.util.concurrent.ConcurrentHashMap
-import kotlinx.coroutines.withTimeoutOrNull
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -79,6 +75,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -92,10 +89,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import mihon.core.metro.AppCoroutineScope
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.chapter.interactor.GetChaptersByMangaId
@@ -111,8 +109,10 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.manga.interactor.GetManga
 import tachiyomi.domain.manga.model.Manga
 import tachiyomi.domain.source.service.SourceManager
+import tachiyomi.i18n.MR
 import tachiyomi.source.local.image.LocalCoverManager
 import tachiyomi.source.local.isLocal
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -1358,12 +1358,16 @@ class ReaderViewModel(
                     )
                 } catch (e: Exception) {
                     if (provider.supportsImageGeneration) {
-                        logcat(LogPriority.WARN, e) { "Local OCR failed, falling back to redraw translation: ${e.message}" }
+                        logcat(LogPriority.WARN, e) {
+                            "Local OCR failed, falling back to redraw translation: ${e.message}"
+                        }
                         val result = nanoBananaClient.translatePage(
                             image = originalBytes,
                             mimeType = "image/jpeg",
                             apiKey = apiKey,
-                            model = translationPreferences.model(provider).get().ifBlank { TranslationOptions.DEFAULT_MODEL },
+                            model = translationPreferences.model(provider).get().ifBlank {
+                                TranslationOptions.DEFAULT_MODEL
+                            },
                             language = language,
                             promptContext = promptContext,
                             provider = provider,
@@ -1573,7 +1577,9 @@ class ReaderViewModel(
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Chapter translation error" }
                 val errorMsg = when (e) {
-                    is TranslationException.InvalidApiKey -> context.stringResource(MR.strings.translation_error_invalid_key)
+                    is TranslationException.InvalidApiKey -> context.stringResource(
+                        MR.strings.translation_error_invalid_key,
+                    )
                     is TranslationException.QuotaExceeded -> context.stringResource(MR.strings.translation_error_quota)
                     else -> e.message ?: "Translation error"
                 }
