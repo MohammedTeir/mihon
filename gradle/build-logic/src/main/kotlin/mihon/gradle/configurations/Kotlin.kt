@@ -6,7 +6,7 @@ import org.gradle.kotlin.dsl.configure
 import org.jetbrains.kotlin.gradle.dsl.HasConfigurableKotlinCompilerOptions
 import org.jetbrains.kotlin.gradle.dsl.KotlinBaseExtension
 import org.jetbrains.kotlin.gradle.dsl.KotlinCommonCompilerOptions
-import tapmoc.configureJavaCompatibility
+import com.gradleup.tapmoc.configureJavaCompatibility
 
 fun Project.configureKotlin() {
     configureJavaCompatibility(mihonx.versions.java.get().toInt())
