@@ -92,26 +92,145 @@ class LocalOcrClientTest {
 
     @Test
     fun `fallbackTranslateWord uses natural colloquial baladi words`() {
-        assertEquals("شو!", client.fallbackTranslateWord("What!", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
-        assertEquals("ليش؟", client.fallbackTranslateWord("Why?", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
-        assertEquals("مين؟", client.fallbackTranslateWord("Who?", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
-        assertEquals("وين؟", client.fallbackTranslateWord("Where?", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
-        assertEquals("استنى!", client.fallbackTranslateWord("Wait!", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
-        assertEquals("وقف!", client.fallbackTranslateWord("Stop!", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
-        assertEquals("شوف!", client.fallbackTranslateWord("Look!", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
-        assertEquals("تمام", client.fallbackTranslateWord("OK", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
-        assertEquals("أكيد", client.fallbackTranslateWord("Sure", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI))
+        assertEquals(
+            "شو!",
+            client.fallbackTranslateWord(
+                "What!",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
+        assertEquals(
+            "ليش؟",
+            client.fallbackTranslateWord(
+                "Why?",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
+        assertEquals(
+            "مين؟",
+            client.fallbackTranslateWord(
+                "Who?",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
+        assertEquals(
+            "وين؟",
+            client.fallbackTranslateWord(
+                "Where?",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
+        assertEquals(
+            "استنى!",
+            client.fallbackTranslateWord(
+                "Wait!",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
+        assertEquals(
+            "وقف!",
+            client.fallbackTranslateWord(
+                "Stop!",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
+        assertEquals(
+            "شوف!",
+            client.fallbackTranslateWord(
+                "Look!",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
+        assertEquals(
+            "تمام",
+            client.fallbackTranslateWord(
+                "OK",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
+        assertEquals(
+            "أكيد",
+            client.fallbackTranslateWord(
+                "Sure",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_BALADI,
+            ),
+        )
     }
 
     @Test
     fun `fallbackTranslateWord uses formal standard words when style is modern`() {
-        assertEquals("ماذا!", client.fallbackTranslateWord("What!", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN))
-        assertEquals("لماذا؟", client.fallbackTranslateWord("Why?", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN))
-        assertEquals("من؟", client.fallbackTranslateWord("Who?", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN))
-        assertEquals("أين؟", client.fallbackTranslateWord("Where?", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN))
-        assertEquals("انتظر!", client.fallbackTranslateWord("Wait!", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN))
-        assertEquals("توقف!", client.fallbackTranslateWord("Stop!", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN))
-        assertEquals("انظر!", client.fallbackTranslateWord("Look!", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN))
-        assertEquals("حسناً", client.fallbackTranslateWord("OK", "Arabic", eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN))
+        assertEquals(
+            "ماذا!",
+            client.fallbackTranslateWord(
+                "What!",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN,
+            ),
+        )
+        assertEquals(
+            "لماذا؟",
+            client.fallbackTranslateWord(
+                "Why?",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN,
+            ),
+        )
+        assertEquals(
+            "من؟",
+            client.fallbackTranslateWord(
+                "Who?",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN,
+            ),
+        )
+        assertEquals(
+            "أين؟",
+            client.fallbackTranslateWord(
+                "Where?",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN,
+            ),
+        )
+        assertEquals(
+            "انتظر!",
+            client.fallbackTranslateWord(
+                "Wait!",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN,
+            ),
+        )
+        assertEquals(
+            "توقف!",
+            client.fallbackTranslateWord(
+                "Stop!",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN,
+            ),
+        )
+        assertEquals(
+            "انظر!",
+            client.fallbackTranslateWord(
+                "Look!",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN,
+            ),
+        )
+        assertEquals(
+            "حسناً",
+            client.fallbackTranslateWord(
+                "OK",
+                "Arabic",
+                eu.kanade.domain.translation.TranslationOptions.ARABIC_STYLE_MODERN,
+            ),
+        )
     }
 }

@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,9 +24,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
-
-import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
-import androidx.compose.material3.SuggestionChip
 
 @Composable
 fun ExtensionStoreCreateDialog(
@@ -74,7 +73,9 @@ fun ExtensionStoreCreateDialog(
                 if (!storeIndexUrls.any { it.contains("keiyoushi") }) {
                     SuggestionChip(
                         onClick = {
-                            state.setTextAndPlaceCursorAtEnd("https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json")
+                            state.setTextAndPlaceCursorAtEnd(
+                                "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json",
+                            )
                         },
                         label = {
                             Text(text = stringResource(MR.strings.extension_store_keiyoushi_title))

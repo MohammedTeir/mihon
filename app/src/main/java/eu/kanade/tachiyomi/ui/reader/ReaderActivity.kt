@@ -42,8 +42,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import mihon.icons.materialsymbols.MaterialSymbols
-import mihon.icons.materialsymbols.rounded.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -111,6 +109,8 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import mihon.app.di.AppGraph
 import mihon.core.metro.metroGraph
+import mihon.icons.materialsymbols.MaterialSymbols
+import mihon.icons.materialsymbols.rounded.Close
 import tachiyomi.core.common.Constants
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
@@ -331,7 +331,9 @@ class ReaderActivity : BaseActivity() {
                                 progress = {
                                     if (chapterProgress.second > 0) {
                                         chapterProgress.first.toFloat() / chapterProgress.second
-                                    } else 0f
+                                    } else {
+                                        0f
+                                    }
                                 },
                                 modifier = Modifier.fillMaxWidth().height(4.dp),
                             )
